@@ -1,2 +1,5 @@
 out/
 __pycache__/
+asm/*.o
+asm/*.l
+asm/*.bin

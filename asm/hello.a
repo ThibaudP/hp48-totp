@@ -1,0 +1,17 @@
+* hello.a -- smoke test for the toolchain: a Code object that adds 1 to the
+* user binary integer in stack level 1, in place.  #41h EVAL -> #42h.
+* Uses no ROM entries.  D0 (RPL instruction pointer) is left untouched.
+        NIBASC  \HPHP48-E\
+        CON(5)  #02DCC          Code prolog (DOCODE)
+        REL(5)  end             length of the code body
+        A=DAT1  A               A = address of the object in level 1
+        AD1EX                   D1 = object, A = saved stack pointer
+        D1=D1+  10              skip prolog (02A4E) and length field (00015)
+        C=DAT1  W               C = 64-bit value
+        C=C+1   W
+        DAT1=C  W
+        AD1EX                   restore stack pointer
+        A=DAT0  A               LOOP: continue with the next RPL object
+        D0=D0+  5
+        PC=(A)
+end

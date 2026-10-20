@@ -1,0 +1,4 @@
+OPTION CODE
+OUTPUT hello.bin
+RELOCATE hello.o
+END

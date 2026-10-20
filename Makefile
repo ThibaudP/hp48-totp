@@ -1,6 +1,7 @@
 PY ?= python3
+HPTOOLS ?= $(HOME)/.local/share/hp48-emu/hptools/bin
 
-.PHONY: test vectors trace payload-rfc payload-rfc-emu emu emu-rpl
+.PHONY: test vectors trace payload-rfc payload-rfc-emu emu emu-rpl asm
 
 test:
 	cd ref && $(PY) -m unittest -v test_ref
@@ -26,3 +27,9 @@ emu-rpl: $(patsubst rpl/%.hp,out/%.txt,$(wildcard rpl/*.hp))
 out/%.txt: rpl/%.hp tools/hp2emu.py
 	@mkdir -p out
 	$(PY) tools/hp2emu.py $< $@
+
+# asm/NAME.a + asm/NAME.m -> asm/NAME.bin (HPHP48 binary object, Load Object in Emu48)
+asm: $(patsubst %.a,%.bin,$(wildcard asm/*.a))
+
+asm/%.bin: asm/%.a asm/%.m
+	cd asm && $(HPTOOLS)/sasm $*.a && $(HPTOOLS)/sload -H $*.m > /dev/null
