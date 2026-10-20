@@ -1,7 +1,9 @@
 PY ?= python3
 HPTOOLS ?= $(HOME)/.local/share/hp48-emu/hptools/bin
+X48NG_SRC ?= $(HOME)/.local/share/hp48-emu/src/x48ng/src
+SATRUN = tools/satrun/satrun
 
-.PHONY: test vectors trace payload-rfc payload-rfc-emu emu emu-rpl asm
+.PHONY: test vectors trace payload-rfc payload-rfc-emu emu emu-rpl asm satrun asm-test
 
 test:
 	cd ref && $(PY) -m unittest -v test_ref
@@ -33,3 +35,12 @@ asm: $(patsubst %.a,%.bin,$(wildcard asm/*.a))
 
 asm/%.bin: asm/%.a asm/%.m
 	cd asm && $(HPTOOLS)/sasm $*.a && $(HPTOOLS)/sload -H $*.m > /dev/null
+
+# x48ng's Saturn CPU core with flat memory, for unit-testing asm routines
+satrun: $(SATRUN)
+
+$(SATRUN): tools/satrun/satrun.c $(X48NG_SRC)/core/emulate.c $(X48NG_SRC)/core/registers.c
+	$(CC) -O2 -w -I$(X48NG_SRC) -o $@ $^
+
+asm-test: asm $(SATRUN)
+	cd asm && $(PY) -m unittest -v test_asm
