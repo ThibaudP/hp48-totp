@@ -6,6 +6,7 @@
 @ TZ changes; each second only TICK redraws the countdown.
 \<<
   IF 'WRK' VTYPE -1 == THEN "" 1 360 START "0" + NEXT 'WRK' STO END
+  { OTP } ORDER
   #131d #64d BLANK PICT STO { #0d #0d } PVIEW
   1 -1 -1 LBLS 0 \-> i lc lu lbls done
   \<<

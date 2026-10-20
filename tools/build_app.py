@@ -24,7 +24,9 @@ def strip(text):
 
 def build():
     parts = [HEADER, "DIR"]
-    for path in sorted(glob.glob(os.path.join(ROOT, "rpl", "*.hp"))):
+    # OTP first: it's the only variable the user needs, so it gets the first soft key.
+    paths = sorted(glob.glob(os.path.join(ROOT, "rpl", "*.hp")), key=lambda p: (not p.endswith("OTP.hp"), p))
+    for path in paths:
         name = os.path.basename(path)[:-3]
         with open(path) as f:
             parts += [f"{name}", strip(f.read())]
