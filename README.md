@@ -12,7 +12,7 @@ large digits, and a countdown bar with the seconds left. The soft keys are
 **PREV** / **NEXT** (◀ ▶ also work), **TZ** (CET ↔ CEST) and **QUIT** (ON also
 quits).
 
-The original plan and design notes (in French) are in [HANDOFF.md](HANDOFF.md).
+How it works in depth (algorithm, Saturn code, object layouts, cable, pitfalls): [DESIGN.md](DESIGN.md).
 
 ## How it works
 
@@ -46,7 +46,7 @@ The original plan and design notes (in French) are in [HANDOFF.md](HANDOFF.md).
 ### What you need
 
 - An HP 48G or 48GX, and a serial cable to the PC through a USB-RS232 adapter
-  (real RS-232 levels; see the appendix of HANDOFF.md for the pinout).
+  (real RS-232 levels; pinout in [DESIGN.md](DESIGN.md#cable)).
 - On the calculator, wire mode (`-33 CF`) and `IOPAR` set to `{ 9600 0 0 0 3 1 }`.
 - The calculator's clock set to local time, to the second if possible. `TZ`
   (default 2, CEST) is the UTC offset in hours, and the TZ key toggles 1 ↔ 2.
