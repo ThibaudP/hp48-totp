@@ -1,0 +1,268 @@
+* sha1.a -- SHA-1 compression function for the HP 48 (Saturn).
+*
+* SHA1C: one compression of a 64-byte block.
+*   In:  D0 -> work area of 680 nibbles:
+*          +0    H0..H4    state, 5 words (updated in place)
+*          +40   W0..W79   block in W0..W15; W16..W79 are scratch
+*   Words are 8 nibbles, least significant first (the Saturn's own order),
+*   so loads and stores need no byte swapping.
+*   Uses A B C D R0-R4 D0 D1 P and 3 RSTK levels (with the caller's).
+*   Returns with P=0 and HEX mode set.
+*
+* Every 32-bit value keeps nibbles 8-15 at zero.  Arithmetic and logic use
+* field WP with P=7 (nibbles 0-7), so sums wrap modulo 2^32; whole-register
+* bit shifts (ASRB, BSRB) then shift zeros in from the top.
+
+SHA1C   SETHEX
+        P=      7
+        A=0     W
+        B=0     W
+        C=0     W
+        D=0     W
+
+* Message schedule, t = 16..79:
+*   W[t] = rotl1(W[t-3] ^ W[t-8] ^ W[t-14] ^ W[t-16])
+* D0 walks W[t-16]; the other words sit at fixed offsets from it.
+        CD0EX                   C[A] = base
+        R0=C                    keep base until the rounds start
+        D0=C
+        D0=D0+  16
+        D0=D0+  16
+        D0=D0+  8               D0 -> W0
+        P=      0
+        LC(2)   63              64 iterations
+        D=C     B
+        P=      7
+SCHED   C=0     W
+        C=DAT0  8               W[t-16]
+        D0=D0+  16              -> W[t-14]
+        A=DAT0  8
+        GOSUB   XOR
+        D0=D0+  16
+        D0=D0+  16
+        D0=D0+  16              -> W[t-8]
+        A=DAT0  8
+        GOSUB   XOR
+        D0=D0+  16
+        D0=D0+  16
+        D0=D0+  8               -> W[t-3]
+        A=DAT0  8
+        GOSUB   XOR
+        D0=D0+  16
+        D0=D0+  8               -> W[t]
+        A=C     W
+        A=A+A   WP              rotl1: shift, then feed the carry back in
+        GONC    SCHED1
+        A=A+1   WP
+SCHED1  DAT0=A  8
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  8               -> W[t-15], the next W[t-16]
+        D=D-1   B
+        GONC    SCHED
+
+* Rounds.  a..e live in R0..R4, D1 walks W[t], D0 stays on the state.
+        C=R0
+        D0=C
+        D1=C
+        D1=D1+  16
+        D1=D1+  16
+        D1=D1+  8               D1 -> W0
+        C=0     W
+        C=DAT0  8
+        R0=C                    a
+        D0=D0+  8
+        C=DAT0  8
+        R1=C                    b
+        D0=D0+  8
+        C=DAT0  8
+        R2=C                    c
+        D0=D0+  8
+        C=DAT0  8
+        R3=C                    d
+        D0=D0+  8
+        C=DAT0  8
+        R4=C                    e
+        D0=D0-  16
+        D0=D0-  16              D0 -> H0
+
+* t = 0..19: f = (b & c) | (~b & d), K = 5A827999
+        GOSUB   COUNT20
+ROUND1  A=R1
+        C=R2
+        C=C&A   WP
+        B=C     W               b & c
+        A=-A-1  WP              ~b
+        C=R3
+        C=C&A   WP
+        C=C!B   WP
+        A=C     W
+        C=0     W
+        P=      0
+        LCHEX   5A827999
+        P=      7
+        C=C+A   WP
+        GOSUB   ROUND
+        D=D-1   B
+        GONC    ROUND1
+
+* t = 20..39: f = b ^ c ^ d, K = 6ED9EBA1
+        GOSUB   COUNT20
+ROUND2  A=R1
+        C=R2
+        GOSUB   XOR
+        A=R3
+        GOSUB   XOR
+        A=C     W
+        C=0     W
+        P=      0
+        LCHEX   6ED9EBA1
+        P=      7
+        C=C+A   WP
+        GOSUB   ROUND
+        D=D-1   B
+        GONC    ROUND2
+
+* t = 40..59: f = (b & c) | (b & d) | (c & d) = (b & (c | d)) | (c & d)
+*             K = 8F1BBCDC
+        GOSUB   COUNT20
+ROUND3  A=R2
+        C=R3
+        B=C     W
+        C=C&A   WP              c & d
+        A=A!B   WP              c | d
+        B=C     W
+        C=R1
+        C=C&A   WP
+        C=C!B   WP
+        A=C     W
+        C=0     W
+        P=      0
+        LCHEX   8F1BBCDC
+        P=      7
+        C=C+A   WP
+        GOSUB   ROUND
+        D=D-1   B
+        GONC    ROUND3
+
+* t = 60..79: f = b ^ c ^ d, K = CA62C1D6
+        GOSUB   COUNT20
+ROUND4  A=R1
+        C=R2
+        GOSUB   XOR
+        A=R3
+        GOSUB   XOR
+        A=C     W
+        C=0     W
+        P=      0
+        LCHEX   CA62C1D6
+        P=      7
+        C=C+A   WP
+        GOSUB   ROUND
+        D=D-1   B
+        GONC    ROUND4
+
+* H[i] += a..e
+        A=0     W
+        A=DAT0  8
+        C=R0
+        A=A+C   WP
+        DAT0=A  8
+        D0=D0+  8
+        A=DAT0  8
+        C=R1
+        A=A+C   WP
+        DAT0=A  8
+        D0=D0+  8
+        A=DAT0  8
+        C=R2
+        A=A+C   WP
+        DAT0=A  8
+        D0=D0+  8
+        A=DAT0  8
+        C=R3
+        A=A+C   WP
+        DAT0=A  8
+        D0=D0+  8
+        A=DAT0  8
+        C=R4
+        A=A+C   WP
+        DAT0=A  8
+        P=      0
+        RTN
+
+* D[B] = 19: loop counter for 20 rounds (D=D-1 B borrows after the 20th).
+COUNT20 P=      0
+        LC(2)   19
+        D=C     B
+        P=      7
+        RTN
+
+* One round.  In: C = f + K, D1 -> W[t].
+*   temp = rotl5(a) + f + K + e + W[t]
+*   e = d, d = c, c = rotl30(b), b = a, a = temp
+ROUND   A=0     W
+        A=DAT1  8
+        C=C+A   WP
+        A=R4
+        C=C+A   WP
+        A=R0
+        GOSUB   ROTL5
+        C=C+A   WP
+        A=R3
+        R4=A
+        A=R2
+        R3=A
+        A=R1
+        GOSUB   ROTL30
+        R2=A
+        A=R0
+        R1=A
+        R0=C
+ROUNDE  D1=D1+  8               a..e are final for this round here
+        RTN
+
+* C = C ^ A as (C | A) & ~(C & A).  Keeps A, uses B.
+XOR     B=C     W
+        C=C&A   WP
+        C=-C-1  WP
+        B=B!A   WP
+        C=C&B   WP
+        RTN
+
+* A = rotl(A, 5) = (A << 5) | (A >> 27).  Uses B.
+ROTL5   B=A     W
+        ASL     WP
+        A=A+A   WP
+        BSR     WP
+        BSR     WP
+        BSR     WP
+        BSR     WP
+        BSR     WP
+        BSR     WP
+        BSRB
+        BSRB
+        BSRB
+        A=A!B   WP
+        RTN
+
+* A = rotl(A, 30) = (A >> 2) | (A << 30).  Uses B.
+ROTL30  B=A     W
+        ASRB
+        ASRB
+        BSL     WP
+        BSL     WP
+        BSL     WP
+        BSL     WP
+        BSL     WP
+        BSL     WP
+        BSL     WP
+        B=B+B   WP
+        B=B+B   WP
+        A=A!B   WP
+        RTN

@@ -43,7 +43,7 @@ $(SATRUN): tools/satrun/satrun.c $(X48NG_SRC)/core/emulate.c $(X48NG_SRC)/core/r
 	$(CC) -O2 -w -I$(X48NG_SRC) -o $@ $^
 
 asm-test: asm $(SATRUN)
-	cd asm && $(PY) -m unittest -v test_asm
+	cd asm && $(PY) -m unittest discover -v -p 'test_*.py'
 
 # boots x48ng headless, talks to it over the emulated wire port (slow, ~1 min)
 e2e: asm

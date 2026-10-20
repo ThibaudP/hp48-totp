@@ -1,0 +1,4 @@
+OPTION CODE
+OUTPUT sha1.bin
+RELOCATE sha1.o
+END
