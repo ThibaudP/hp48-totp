@@ -170,11 +170,15 @@ class Kermit:
         # R (receive-init) asks the server to start sending NAME.
         self.port.write(make_packet(0, "R", name.encode("latin-1")))
         data, expect = bytearray(), 0
+        # The deadline only covers silence: big objects take a while to decompile and send.
         deadline = time.time() + self.timeout * self.retries
         while time.time() < deadline:
             r = self.port.read_packet(self.timeout)
             if r is None:
+                # NAK the packet we are waiting for so a lost one gets resent.
+                self.port.write(make_packet(expect, "N"))
                 continue
+            deadline = time.time() + self.timeout * self.retries
             seq, typ, pdata = r
             self.log("<", seq, typ, pdata[:40])
             if typ == "E":

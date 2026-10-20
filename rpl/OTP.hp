@@ -1,0 +1,37 @@
+@ The app: one account per screen, code in big digits, countdown bar.
+@ Keys: PREV / NEXT (or left / right arrows), TZ (CET <-> CEST), QUIT (or ON).
+@ Drawn in PICT, shown full screen with PVIEW (so the bottom row can hold our
+@ own key labels); PICT is only ever updated in place with REPL, so the display
+@ never points at a stale object.  The screen is rebuilt only when the code, the account or
+@ TZ changes; each second only TICK redraws the countdown.
+\<<
+  IF 'WRK' VTYPE -1 == THEN "" 1 360 START "0" + NEXT 'WRK' STO END
+  #131d #64d BLANK PICT STO { #0d #0d } PVIEW
+  1 -1 -1 LBLS 0 \-> i lc lu lbls done
+  \<<
+    DO
+      UNIX \-> u
+      \<<
+        IF u lu \=/ THEN
+          IF u 30 / IP DUP lc \=/ THEN
+            'lc' STO
+            ACCTS i GET 1 GET
+            i \->STR "/" + ACCTS SIZE \->STR + " " + IF TZ 2 == THEN "CEST" ELSE "CET" END +
+            i lc CODE lbls SCRN PICT { #0d #0d } ROT REPL
+          ELSE DROP END
+          u 'lu' STO
+          30 u 30 MOD - TICK
+        END
+      \>>
+      IF KEY THEN
+        CASE
+          DUP 11 == OVER 34 == OR THEN DROP i 2 - ACCTS SIZE MOD 1 + 'i' STO -1 'lc' STO -1 'lu' STO END
+          DUP 12 == OVER 36 == OR THEN DROP i ACCTS SIZE MOD 1 + 'i' STO -1 'lc' STO -1 'lu' STO END
+          DUP 14 == THEN DROP 3 TZ - 'TZ' STO -1 'lc' STO -1 'lu' STO END
+          DUP 16 == THEN DROP 1 'done' STO END
+          DROP
+        END
+      ELSE .1 WAIT END
+    UNTIL done END
+  \>>
+\>>

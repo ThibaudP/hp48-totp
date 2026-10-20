@@ -1,0 +1,8 @@
+@ Unix time in whole seconds from the calculator clock (local time - TZ hours).
+@ Re-reads DATE until stable so a call across midnight can't mix two days.
+\<< 0 0 \-> d t
+  \<<
+    DO DATE 'd' STO TIME 't' STO UNTIL DATE d SAME END
+    1.011970 d DDAYS 86400 * t HMS\-> 3600 * + TZ 3600 * - IP
+  \>>
+\>>

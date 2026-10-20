@@ -1,0 +1,4 @@
+@ account index, TOTP counter -> 6-digit code string
+\<< \-> i c
+  \<< ACCTS i GET 2 GET c R\->B WRK HOTP B\->R 1000000 MOD FMT6 \>>
+\>>

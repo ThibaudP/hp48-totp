@@ -10,7 +10,9 @@ Offline TOTP codes on an HP 48G. Plan and technical notes: [HANDOFF.md](HANDOFF.
 | `make trace` | SHA-1 state after every round for the RFC vector (reference for the asm) |
 | `make asm` | Assemble `asm/*.a` with HP Tools into `asm/*.bin` (HPHP48 binary objects) |
 | `make asm-test` | Run asm routines on x48ng's CPU core (`tools/satrun`), no ROM or UI |
-| `make e2e` | Boot a headless 48GX in x48ng, transfer over the emulated wire port, run, fetch results (~70 s) |
+| `make e2e` | Boot headless 48GXs in x48ng: HOTP, app programs, rendered screen, and the live app driven by keys (~3.5 min) |
+| `make app` | Build `out/TOTP`: the app directory (RPL programs + big digit font) as text |
+| `make payload-rfc` | `out/ACCTS` with RFC test accounts (`ref/make_hp_payload.py` alone prompts for real ones) |
 | `make emu` | Emu48 under Wine, for poking around by hand |
 
 ## Test layers
@@ -46,6 +48,38 @@ x48ng quirks handled by `tools/x48.sh` / `tools/hp48.py`:
 - unthrottled emulation runs the calculator clock fast while busy: `--throttle`;
 - the wire port sometimes stops answering after a transfer: press ON, `SERVER` again, retry;
 - flag -36 is set so received files overwrite existing variables.
+
+## Installing on the calculator
+
+```sh
+make asm app
+python3 ref/make_hp_payload.py          # real accounts: name + base32 secret, writes out/ACCTS (0600)
+PORT=/dev/serial/by-id/usb-...
+```
+On the 48G: wire mode (`-33 CF`), IOPAR `{ 9600 0 0 0 3 1 }`, then `SERVER`. Then:
+```sh
+python3 tools/hpkermit.py $PORT send out/TOTP TOTP
+```
+On the 48G: ON, `TOTP` (enter the directory), `SERVER` again. Then:
+```sh
+python3 tools/hpkermit.py $PORT send asm/hotp.bin HOTP
+python3 tools/hpkermit.py $PORT send out/ACCTS ACCTS
+python3 tools/hpkermit.py $PORT finish
+```
+Run `OTP` in the TOTP directory. Keys: PREV / NEXT (or ◀ ▶), TZ toggles CET/CEST,
+QUIT (or ON). Set the clock to local time; `TZ` is the UTC offset in hours.
+`OTP` creates `WRK` (scratch) on first run. RAM: about 4.1 KB plus ~200 B per
+account, with ~3 KB of headroom while running.
+
+## The app
+
+`rpl/*.hp`, one object per file, assembled by `tools/build_app.py`:
+`UNIX` (clock → Unix time), `CODE` (account, counter → 6 digits via `HOTP`),
+`SCRN` (name, header, code, labels → screen GROB), `LBLS` (soft key labels),
+`TICK` (countdown bar into PICT), `OTP` (the app loop: PICT + PVIEW, KEY polling;
+the full screen is rebuilt only when the code changes, ~1 s at 48GX speed; the
+countdown costs ~0.06 s per second). Names must not collide with built-in
+commands (DRAW and MENU did).
 
 ## Calling HOTP
 

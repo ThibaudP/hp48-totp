@@ -1,0 +1,16 @@
+@ -> 131x8 GROB with the app's soft key labels (built once per run)
+\<< #131d #8d BLANK
+  { "PREV" "NEXT" "" "TZ" "" "QUIT" } \-> labels
+  \<<
+    1 6 FOR j
+      labels j GET
+      IF DUP SIZE THEN
+        j 1 - 22 * \-> x
+        \<<
+          SWAP x R\->B #0d 2 \->LIST #21d #8d BLANK NEG REPL
+          SWAP 1 \->GROB NEG DUP SIZE DROP B\->R 21 SWAP - 2 / IP x + R\->B #1d 2 \->LIST SWAP REPL
+        \>>
+      ELSE DROP END
+    NEXT
+  \>>
+\>>

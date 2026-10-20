@@ -10,8 +10,8 @@
 set -eu
 DATA="${HP48_X48NG_DATA:-$HOME/.local/share/hp48-emu/x48ng-data}"
 BIN="${HP48_X48NG_BIN:-$HOME/.local/share/hp48-emu/src/x48ng/dist/x48ng}"
-S=hp48
-DELAY=0.4
+S="${HP48_SESSION:-hp48}"
+DELAY=0.6
 
 keys() {
     for k in "$@"; do
@@ -46,7 +46,8 @@ start)
     done
     sleep 1
     keys f
-    sleep 2
+    # throttled, the 48 takes a moment after "NO" before it reads keys reliably
+    sleep 4
     ;;
 keys)
     shift

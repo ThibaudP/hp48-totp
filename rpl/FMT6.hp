@@ -1,0 +1,2 @@
+@ n (0..999999) -> 6-digit string with leading zeros
+\<< 1000000 + \->STR 2 7 SUB \>>

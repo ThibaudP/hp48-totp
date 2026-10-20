@@ -27,17 +27,6 @@ class Toolchain(unittest.TestCase):
         self.assertEqual(hp.result(), "# 42h")
 
 
-class Clock(unittest.TestCase):
-    def test_unix_time_matches_host(self):
-        with open(os.path.join(ROOT, "rpl", "CLOCK.hp")) as f:
-            hp.send_text(f.read(), "CLK")
-        # The emulator's clock follows the host's local time, so TZ is the host's offset.
-        tz = time.localtime().tm_gmtoff // 3600
-        hp.eval(f"CLK {tz} 'TZ' STO UNIX")
-        unix = int(float(hp.result()))
-        self.assertLess(abs(unix - time.time()), 10)
-
-
 class Hotp(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -59,19 +48,6 @@ class Hotp(unittest.TestCase):
     def test_rfc6238_t59_and_large_counter(self):
         # T = 1111111111 s -> counter 37037037 -> 050471 (RFC 6238, 6 digits)
         self.assertEqual(self.code("37037037"), 50471)
-
-    def test_totp_from_calculator_clock(self):
-        from totp_ref import RFC_SECRET, totp
-        with open(os.path.join(ROOT, "rpl", "CLOCK.hp")) as f:
-            hp.send_text(f.read(), "CLK")
-        tz = time.localtime().tm_gmtoff // 3600
-        before = time.time()
-        hp.eval(f"CLK {tz} 'TZ' STO KT CNT R\\->B WRK HOTP B\\->R 1000000 MOD")
-        after = time.time()
-        got = f"{int(float(hp.result())):06d}"
-        # The code was computed somewhere between before and after.
-        allowed = {totp(RFC_SECRET, int(t)) for t in (before - 5, before, after, after + 5)}
-        self.assertIn(got, allowed)
 
 
 if __name__ == "__main__":

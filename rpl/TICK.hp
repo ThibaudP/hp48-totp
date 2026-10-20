@@ -1,0 +1,13 @@
+@ seconds-left -> (draws the countdown bar and seconds into PICT in one REPL,
+@ so the display never shows a half-drawn countdown)
+\<< \-> left
+  \<<
+    PICT { #0d #40d }
+    #131d #10d BLANK
+    IF left 0 > THEN
+      { #2d #3d } left 3 * R\->B #4d BLANK NEG REPL
+    END
+    left \->STR "s" + 2 \->GROB DUP SIZE DROP #131d SWAP - #0d 2 \->LIST SWAP REPL
+    REPL
+  \>>
+\>>

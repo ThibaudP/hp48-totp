@@ -10,6 +10,7 @@ types and runs a command line, and goes back to server mode.
 """
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -22,12 +23,27 @@ X48 = os.path.join(TOOLS, "x48.sh")
 HEADER = "%%HP: T(3)A(D)F(.);"
 
 
+class CalcError(Exception):
+    pass
+
+
+DATA = os.path.expanduser("~/.local/share/hp48-emu/x48ng-data")
+ENV = dict(os.environ)
+
+
 def x48(*args):
-    return subprocess.run([X48, *args], check=True, capture_output=True, text=True).stdout
+    return subprocess.run([X48, *args], check=True, capture_output=True, text=True, env=ENV).stdout
 
 
 class Emulator:
     def __enter__(self):
+        # Own tmux session and data directory, so parallel runs (other shells,
+        # other sessions) never drive or reset each other's emulator.
+        self.data = tempfile.mkdtemp(prefix="hp48-")
+        for f in ("rom", "config.lua"):
+            shutil.copy(os.path.join(DATA, f), self.data)
+        ENV["HP48_SESSION"] = f"hp48-{os.getpid()}"
+        ENV["HP48_X48NG_DATA"] = self.data
         x48("start")
         self.kermit = None
         # -36 SF: received files overwrite existing variables (RUN is re-sent each eval).
@@ -39,6 +55,7 @@ class Emulator:
 
     def __exit__(self, *exc):
         x48("stop")
+        shutil.rmtree(self.data, ignore_errors=True)
 
     def server(self):
         x48("type", "SERVER")
@@ -78,14 +95,17 @@ class Emulator:
 
     def eval(self, rpl):
         """Run RPL on the calculator, then store level 1 in RSLT (fetch it with result())."""
-        self.send_text(f"\\<< {rpl} 'RSLT' STO \\>>", "RUN")
+        self.send_text(f"\\<< IFERR {rpl} THEN \"ERROR: \" ERRM + END 'RSLT' STO \\>>", "RUN")
         self.leave_server()
         x48("type", "RUN")
         x48("keys", "Enter")
         self.server()
 
     def result(self):
-        return self.get("RSLT")
+        r = self.get("RSLT")
+        if r.startswith('"ERROR: '):
+            raise CalcError(r.strip('"'))
+        return r
 
     def screen(self):
         return x48("screen")

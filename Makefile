@@ -3,7 +3,7 @@ HPTOOLS ?= $(HOME)/.local/share/hp48-emu/hptools/bin
 X48NG_SRC ?= $(HOME)/.local/share/hp48-emu/src/x48ng/src
 SATRUN = tools/satrun/satrun
 
-.PHONY: test vectors trace payload-rfc payload-rfc-emu emu emu-rpl asm satrun asm-test e2e
+.PHONY: test vectors trace payload-rfc app emu emu-rpl asm satrun asm-test e2e
 
 test:
 	cd ref && $(PY) -m unittest -v test_ref
@@ -15,10 +15,11 @@ trace:
 	cd ref && $(PY) sha1_trace.py rfc
 
 payload-rfc:
-	cd ref && $(PY) make_hp_payload.py --name KT --rfc
+	cd ref && $(PY) make_hp_payload.py --rfc
 
-payload-rfc-emu:
-	cd ref && $(PY) make_hp_payload.py --name KT --rfc --emu
+# out/TOTP: the app directory (RPL programs + big digit font) in text form
+app:
+	$(PY) tools/build_app.py
 
 emu:
 	sh tools/emu48.sh
@@ -46,5 +47,5 @@ asm-test: asm $(SATRUN)
 	cd asm && $(PY) -m unittest discover -v -p 'test_*.py'
 
 # boots x48ng headless, talks to it over the emulated wire port (slow, ~1 min)
-e2e: asm
-	$(PY) -m unittest -v tests/test_e2e.py
+e2e: asm app
+	$(PY) -m unittest -v tests/test_e2e.py tests/test_app.py
