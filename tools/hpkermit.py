@@ -168,21 +168,32 @@ class Kermit:
 
     def get(self, name):
         # R (receive-init) asks the server to start sending NAME.
-        self.port.write(make_packet(0, "R", name.encode("latin-1")))
-        data, expect = bytearray(), 0
+        request = make_packet(0, "R", name.encode("latin-1"))
+        self.port.write(request)
+        data, expect, started, requests = bytearray(), 0, False, 1
         # The deadline only covers silence: big objects take a while to decompile and send.
         deadline = time.time() + self.timeout * self.retries
         while time.time() < deadline:
             r = self.port.read_packet(self.timeout)
             if r is None:
-                # NAK the packet we are waiting for so a lost one gets resent.
-                self.port.write(make_packet(expect, "N"))
+                # Before the transfer starts, ask again (a NAK would read as an unknown
+                # server command); during it, NAK the packet we wait for so it is resent.
+                self.port.write(make_packet(expect, "N") if started else request)
                 continue
             deadline = time.time() + self.timeout * self.retries
             seq, typ, pdata = r
             self.log("<", seq, typ, pdata[:40])
+            if typ == "E" and not started and requests < self.retries:
+                # The server may still be finishing the previous transaction when the
+                # request arrives ("Invalid Server Cmd."): give it a moment and retry.
+                time.sleep(1)
+                self.port.buf = b""
+                self.port.write(request)
+                requests += 1
+                continue
             if typ == "E":
                 raise KermitError(f"calculator error: {pdata.decode('latin-1')}")
+            started = True
             ack = SEND_INIT if typ == "S" else b""
             self.port.write(make_packet(seq, "Y", ack))
             if seq != expect:
