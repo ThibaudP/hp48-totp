@@ -11,7 +11,25 @@ Contraintes :
 - Pas de communication réseau : le secret est chargé une fois via le câble série.
 - Projet de loisir à temps limité : chaque étape doit produire un résultat utilisable et testable seul.
 
-## Stack
+## État (21/10/2026)
+
+Toutes les étapes sont faites et l'app tourne sur la vraie 48G (9 comptes importés depuis Ente Auth). Le mode d'emploi et la documentation technique à jour sont dans le [README](README.md) ; ce document garde le plan d'origine.
+
+| Étape | Résultat |
+|---|---|
+| 0 — Outillage | HP Tools 3.0.8 compilés sous Fedora ; x48ng (tests automatisés) et Emu48 sous Wine (manuel) ; câble USB-RS232 Prolific opérationnel |
+| 1 — Référence Python | `ref/` : vecteurs RFC 4226/6238 validés par HMAC et par midstates |
+| 2 — Horloge | `rpl/UNIX.hp` (`CNT` intégré à l'app) |
+| 3 — SHA-1 en assembleur | `asm/sha1.a`, vérifié ronde par ronde contre `sha1_trace.py` (~8 800 instructions) |
+| 4 — HMAC et troncature | `asm/hotp.a`, objet Code sans appel ROM (~0,05 s par code) |
+| 5 — Programme final | `rpl/OTP.hp` : un écran par compte, gros chiffres, décompte, touches PREV/NEXT/TZ/QUIT |
+
+Écarts par rapport au plan :
+- Transfert : C-Kermit ne fonctionne pas avec l'émulateur, remplacé par `tools/hpkermit.py` (client Kermit minimal, aussi utilisé avec le vrai câble).
+- Charge utile : `ACCTS` regroupe tous les comptes (`{ { "nom" { 10 entiers binaires } } … }`) au lieu d'une variable par compte ; import des exports `otpauth://` (Ente Auth, Aegis).
+- Hôte : Fedora (`dnf install ckermit`) plutôt que Debian.
+
+## Stack (plan d'origine)
 
 | Élément | Choix |
 |---|---|
