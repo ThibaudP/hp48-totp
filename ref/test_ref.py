@@ -59,5 +59,16 @@ class Payload(unittest.TestCase):
         self.assertEqual(lines[1].count("#"), 10)
 
 
+class Import(unittest.TestCase):
+    def test_otpauth_uris(self):
+        from make_hp_payload import parse_otpauth
+        b32 = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+        self.assertEqual(parse_otpauth(f"otpauth://totp/GitHub:me?secret={b32}&issuer=GitHub"), ("GitHub", RFC_SECRET))
+        self.assertEqual(parse_otpauth(f"otpauth://totp/me%40x.com?secret={b32.lower()}"), ("me@x.com", RFC_SECRET))
+        self.assertEqual(parse_otpauth(f"otpauth://totp/A:b?secret={b32}&algorithm=SHA256")[1], "algorithm SHA256")
+        self.assertEqual(parse_otpauth(f"otpauth://totp/A:b?secret={b32}&digits=8")[1], "8 digits / 30 s")
+        self.assertEqual(parse_otpauth(f"otpauth://hotp/A:b?secret={b32}")[1], "not TOTP (hotp)")
+
+
 if __name__ == "__main__":
     unittest.main()
