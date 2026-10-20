@@ -3,7 +3,7 @@ HPTOOLS ?= $(HOME)/.local/share/hp48-emu/hptools/bin
 X48NG_SRC ?= $(HOME)/.local/share/hp48-emu/src/x48ng/src
 SATRUN = tools/satrun/satrun
 
-.PHONY: test vectors trace payload-rfc payload-rfc-emu emu emu-rpl asm satrun asm-test
+.PHONY: test vectors trace payload-rfc payload-rfc-emu emu emu-rpl asm satrun asm-test e2e
 
 test:
 	cd ref && $(PY) -m unittest -v test_ref
@@ -44,3 +44,7 @@ $(SATRUN): tools/satrun/satrun.c $(X48NG_SRC)/core/emulate.c $(X48NG_SRC)/core/r
 
 asm-test: asm $(SATRUN)
 	cd asm && $(PY) -m unittest -v test_asm
+
+# boots x48ng headless, talks to it over the emulated wire port (slow, ~1 min)
+e2e: asm
+	$(PY) -m unittest -v tests/test_e2e.py
