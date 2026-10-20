@@ -92,6 +92,7 @@ Chaque étape a un livrable et un critère de réussite.
 ### Étape 5 — Programme final
 - Lecture de l'horloge → compteur → code, affichage du code à 6 chiffres et des secondes restantes (`30 - (unix mod 30)`).
 - Optionnel : plusieurs comptes (une paire de midstates par compte, choix dans un menu `TMENU`).
+- **Interface retenue (20/10/2026)** : écran plein par compte, nom du compte + n°/total + fuseau (CET/CEST) en haut, code en gros chiffres, barre de décompte et secondes restantes rafraîchies chaque seconde ; touches PREV / NEXT / TZ (bascule 1↔2) / QUIT, ON quitte aussi.
 - **Réussite :** dans l'émulateur puis sur la vraie calculatrice, codes identiques à une appli d'authentification pour un compte de test.
 
 ## Sécurité et précautions

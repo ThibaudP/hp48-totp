@@ -1,0 +1,4 @@
+OPTION CODE
+OUTPUT hotp.bin
+RELOCATE hotp.o
+END

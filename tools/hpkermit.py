@@ -130,7 +130,7 @@ SEND_INIT = bytes([tochar(MAXL), tochar(5), tochar(0), ctl(0), tochar(EOL), QCTL
 
 
 class Kermit:
-    def __init__(self, port, timeout=5, retries=10, verbose=False):
+    def __init__(self, port, timeout=2, retries=5, verbose=False):
         self.port, self.timeout, self.retries, self.verbose = port, timeout, retries, verbose
 
     def log(self, *a):

@@ -24,13 +24,27 @@ case "${1:-}" in
 start)
     tmux kill-session -t $S 2>/dev/null || true
     rm -f "$DATA/state" "$DATA/ram"
-    cmd="$BIN --datadir=$DATA --tui-small --reset --serial=pty"
+    cmd="$BIN --datadir=$DATA --tui-small --reset --serial=pty --throttle"
     # --serial (not -t, which enables IR and crashes) opens the wire port as a pty.
     if [ "${2:-}" = gdb ]; then
         cmd="gdb -q -iex 'set debuginfod enabled off' -x $DATA/gdb.cmd --args $cmd"
     fi
-    tmux new-session -d -s $S -x 80 -y 40 "$cmd"
-    sleep 5
+    # Wait for the "Try To Recover Memory?" prompt.  A cold start sometimes
+    # stays dark (x48ng's stuck-on-OFF bug); then start over.
+    for attempt in 1 2 3 4 5; do
+        rm -f "$DATA/state" "$DATA/ram"
+        tmux new-session -d -s $S -x 80 -y 40 "$cmd"
+        i=0
+        until tmux capture-pane -p -t $S 2>/dev/null | sed -n '2,10p' | grep -q '[▀▄▌▐▖▗▘▝▙▛▜▟▚▞█]'; do
+            i=$((i + 1))
+            [ $i -gt 16 ] && break
+            sleep 0.5
+        done
+        [ $i -le 16 ] && break
+        tmux kill-session -t $S
+        [ $attempt = 5 ] && { echo "x48ng did not boot" >&2; exit 1; }
+    done
+    sleep 1
     keys f
     sleep 2
     ;;

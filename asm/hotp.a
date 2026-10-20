@@ -1,0 +1,284 @@
+* hotp.a -- HOTP core as an RPL Code object: HMAC-SHA1 from midstates,
+* then dynamic truncation (RFC 4226).
+*
+*   3: { istate0..4 ostate0..4 }   10 user binary integers (the KT payload),
+*                                  26 nibbles each: prolog, length, value
+*   2: counter                     user binary integer, consumed in place
+*   1: scratch                     string of at least 355 characters
+*   -->
+*   1: truncated value             binary integer < 2^31 (the counter object,
+*                                  overwritten); RPL takes it mod 10^6
+*
+* Pure machine code, no ROM calls: the RPL registers are saved in the scratch
+* string, which also holds the SHA-1 work area.  Scratch body layout (nibbles):
+*   +0  saved D0 (RPL I)    +5  saved D1 (stack)    +10 saved B[A]
+*   +15 saved D[A]          +30 SHA1C work area (680 nibbles)
+* The counter object is written in place, so it must be a fresh object
+* (e.g. straight from R->B), not one that is also stored in a variable.
+
+        NIBASC  \HPHP48-E\
+        CON(5)  #02DCC          Code prolog
+        REL(5)  HOTPEND
+
+HOTP    SETHEX
+        P=      0
+* Save the RPL registers at the start of the scratch body (S).
+        A=DAT1  A               level 1: scratch string
+        LC(5)   10
+        A=A+C   A               A = S
+        AD0EX                   D0 = S, A = RPL I
+        DAT0=A  A
+        D0=D0+  5
+        AD1EX                   A = stack pointer
+        DAT0=A  A
+        D0=D0+  5
+        A=B     A
+        DAT0=A  A
+        D0=D0+  5
+        C=D     A
+        DAT0=C  A
+        D0=D0+  15              D0 = WORK = S+30
+
+        GOSUB   STACK           D1 = stack pointer (D0 kept)
+        D1=D1+  5
+        C=DAT1  A               level 2: counter
+        R4=C                    (STACK needs D0 = WORK, so fetch it now)
+
+* H = istate: elements 0..4 of the list (each element: prolog, length, value).
+        GOSUB   STACK
+        D1=D1+  10
+        A=DAT1  A               level 3: the list
+        D1=A
+        D1=D1+  15              value of element 0
+        GOSUB   COPY5
+
+* Inner block: counter (2 words), padding, length 64+8 bytes = 576 bits.
+        C=R4
+        D1=C
+        D1=D1+  10              counter's 16-nibble value
+        D1=D1+  8
+        C=DAT1  8               high word -> W0
+        DAT0=C  8
+        D0=D0+  8
+        D1=D1-  8
+        C=DAT1  8               low word -> W1
+        DAT0=C  8
+        D0=D0+  8
+        LCHEX   80000000        W2: the 0x80 padding byte
+        DAT0=C  8
+        D0=D0+  8
+        C=0     W               W3..W14
+        DAT0=C  W
+        D0=D0+  16
+        DAT0=C  W
+        D0=D0+  16
+        DAT0=C  W
+        D0=D0+  16
+        DAT0=C  W
+        D0=D0+  16
+        DAT0=C  W
+        D0=D0+  16
+        DAT0=C  W
+        D0=D0+  16
+        LC(5)   576             W15
+        DAT0=C  8
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  16              D0 = WORK (from W15, 160 nibbles)
+        GOSUB   SHA1C
+        D0=D0-  16              SHA1C leaves D0 on H4
+        D0=D0-  16              D0 = WORK
+
+* Outer block: inner hash (5 words), padding, length 64+20 bytes = 672 bits.
+        CD0EX
+        D0=C
+        D1=C
+        D1=D1+  16
+        D1=D1+  16
+        D1=D1+  8               D1 = W0
+        A=DAT0  W               H0 H1
+        DAT1=A  W
+        D0=D0+  16
+        D1=D1+  16
+        A=DAT0  W               H2 H3
+        DAT1=A  W
+        D0=D0+  16
+        D1=D1+  16
+        A=DAT0  8               H4
+        DAT1=A  8
+        D1=D1+  8
+        LCHEX   80000000        W5
+        DAT1=C  8
+        D1=D1+  8
+        C=0     W               W6..W14
+        DAT1=C  W
+        D1=D1+  16
+        DAT1=C  W
+        D1=D1+  16
+        DAT1=C  W
+        D1=D1+  16
+        DAT1=C  W
+        D1=D1+  16
+        DAT1=C  8
+        D1=D1+  8
+        LC(5)   672             W15
+        DAT1=C  8
+
+* H = ostate: elements 5..9 of the list.
+        D0=D0-  16
+        D0=D0-  16              D0 = WORK
+        GOSUB   STACK
+        D1=D1+  10
+        A=DAT1  A
+        D1=A
+        D1=D1+  16              5 + 10 + 5*26 = 145: value of element 5
+        D1=D1+  16
+        D1=D1+  16
+        D1=D1+  16
+        D1=D1+  16
+        D1=D1+  16
+        D1=D1+  16
+        D1=D1+  16
+        D1=D1+  16
+        D1=D1+  1
+        GOSUB   COPY5
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  8               D0 = WORK
+        GOSUB   SHA1C           D0 left on H4
+
+* Dynamic truncation.  The digest's last byte is H4's low byte, so the
+* offset is H4's lowest nibble.  With k = offset / 4 and r = offset % 4,
+* the 4 bytes at offset are the top 32 bits of (H[k] : H[k+1]) << 8r.
+        A=0     W
+        A=DAT0  1               A = offset
+        B=A     W
+        C=0     W
+        LCHEX   C
+        C=C&A   P               C = 4k
+        C=C+C   A               8k nibbles
+        D0=D0-  16
+        D0=D0-  16              D0 = WORK
+        AD0EX
+        R0=A                    keep WORK
+        A=A+C   A
+        D0=A                    D0 -> H[k]
+        A=0     W
+        A=DAT0  8
+        ASL     W
+        ASL     W
+        ASL     W
+        ASL     W
+        ASL     W
+        ASL     W
+        ASL     W
+        ASL     W               H[k] in the high half
+        D0=D0+  8
+        A=DAT0  8               H[k+1] in the low half
+        C=0     W
+        LCHEX   3
+        C=C&B   P               C = r
+TRUNC   ?C=0    P
+        GOYES   TRUNC1
+        ASL     W               one byte
+        ASL     W
+        C=C-1   P
+        GONC    TRUNC
+TRUNC1  ASR     W
+        ASR     W
+        ASR     W
+        ASR     W
+        ASR     W
+        ASR     W
+        ASR     W
+        ASR     W
+        C=0     W
+        LCHEX   7FFFFFFF
+        A=A&C   W
+        R3=A
+
+* Write the result into the counter object, and leave it alone on the stack.
+        C=R0
+        D0=C                    D0 = WORK
+        GOSUB   STACK
+        D1=D1+  5
+        C=DAT1  A               level 2: counter
+        D1=D1+  5
+        DAT1=C  A               ...moves to level 3's slot
+        CD1EX
+        D1=C
+        R1=C                    new stack pointer
+        C=DAT1  A
+        D1=C
+        D1=D1+  10
+        A=R3
+        DAT1=A  W               value
+
+* Restore the RPL registers; two stack levels were dropped.
+        C=R1
+        D1=C
+        C=R0
+        D0=C
+        D0=D0-  16
+        D0=D0-  14              D0 = S+0
+        A=DAT0  A
+        R2=A                    RPL I
+        D0=D0+  10
+        A=DAT0  A
+        B=A     A
+        D0=D0+  5
+        C=DAT0  A
+        D=C     A
+        D=D+1   A
+        D=D+1   A
+        A=R2
+        D0=A
+        A=DAT0  A               continue with the next RPL object
+        D0=D0+  5
+        PC=(A)
+
+* D1 = saved stack pointer.  Needs D0 = WORK; keeps it.
+STACK   CD0EX
+        D0=C
+        D0=D0-  16
+        D0=D0-  9               S+5
+        A=DAT0  A
+        D1=A
+        D0=C
+        RTN
+
+* Copy 5 words: D1 -> list element values (stride 26), D0 -> words (stride 8).
+COPY5   C=DAT1  8
+        DAT0=C  8
+        D0=D0+  8
+        D1=D1+  16
+        D1=D1+  10
+        C=DAT1  8
+        DAT0=C  8
+        D0=D0+  8
+        D1=D1+  16
+        D1=D1+  10
+        C=DAT1  8
+        DAT0=C  8
+        D0=D0+  8
+        D1=D1+  16
+        D1=D1+  10
+        C=DAT1  8
+        DAT0=C  8
+        D0=D0+  8
+        D1=D1+  16
+        D1=D1+  10
+        C=DAT1  8
+        DAT0=C  8
+        D0=D0+  8
+        RTN
+
+        INCLUDE sha1.a
+HOTPEND

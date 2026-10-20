@@ -16,7 +16,7 @@ import tempfile
 
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, TOOLS)
-from hpkermit import Kermit, Port  # noqa: E402
+from hpkermit import Kermit, KermitError, Port  # noqa: E402
 
 X48 = os.path.join(TOOLS, "x48.sh")
 HEADER = "%%HP: T(3)A(D)F(.);"
@@ -30,6 +30,10 @@ class Emulator:
     def __enter__(self):
         x48("start")
         self.kermit = None
+        # -36 SF: received files overwrite existing variables (RUN is re-sent each eval).
+        x48("keys", "3", "6", "y")
+        x48("type", "SF")
+        x48("keys", "Enter")
         self.server()
         return self
 
@@ -45,19 +49,31 @@ class Emulator:
     def leave_server(self):
         self.kermit.finish()
 
+    def kermit_call(self, fn, *args):
+        """Run a Kermit transaction; if the server stopped answering (x48ng's wire
+        port sometimes stalls after a transfer), restart server mode and retry once."""
+        try:
+            return fn(*args)
+        except KermitError as e:
+            if "no ACK for S" not in str(e) and "timed out" not in str(e):
+                raise
+            x48("keys", "F5")
+            self.server()
+            return fn(*args)
+
     def send(self, path, name):
         with open(path, "rb") as f:
-            self.kermit.send(f.read(), name)
+            self.kermit_call(self.kermit.send, f.read(), name)
 
     def send_text(self, source, name):
         """Send RPL source (\\<< \\>> \\-> trigraphs allowed); stored on the calculator as NAME."""
         if not source.startswith("%%HP"):
             source = HEADER + "\n" + source
-        self.kermit.send(source.encode("latin-1"), name)
+        self.kermit_call(self.kermit.send, source.encode("latin-1"), name)
 
     def get(self, name):
         """Variable NAME as the calculator's ASCII transfer text, header stripped."""
-        text = self.kermit.get(name).decode("latin-1").replace("\r\n", "\n")
+        text = self.kermit_call(self.kermit.get, name).decode("latin-1").replace("\r\n", "\n")
         return re.sub(r"^%%HP:[^\n]*\n", "", text).strip()
 
     def eval(self, rpl):
