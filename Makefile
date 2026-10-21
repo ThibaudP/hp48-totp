@@ -1,9 +1,23 @@
 PY ?= python3
-HPTOOLS ?= $(HOME)/.local/share/hp48-emu/hptools/bin
-X48NG_SRC ?= $(HOME)/.local/share/hp48-emu/src/x48ng/src
+# Local toolchain (scripts/setup-toolchain.sh builds it there)
+export HP48_EMU_HOME ?= $(HOME)/.local/share/hp48-emu
+HPTOOLS ?= $(HP48_EMU_HOME)/hptools/bin
+X48NG_SRC ?= $(HP48_EMU_HOME)/src/x48ng/src
 SATRUN = tools/satrun/satrun
 
-.PHONY: test vectors trace payload-rfc app emu emu-rpl asm satrun asm-test e2e
+.PHONY: help toolchain check test vectors trace payload-rfc app emu emu-rpl asm satrun asm-test e2e clean
+
+help:
+	@echo "make toolchain   build HP Tools, x48ng and fetch the ROM into $(HP48_EMU_HOME)"
+	@echo "make check       Python reference tests + Saturn asm tests (fast)"
+	@echo "make e2e         end-to-end tests on a headless emulated 48GX (~3.5 min)"
+	@echo "make asm app     build HOTP (asm/hotp.bin) and the app directory (out/TOTP)"
+	@echo "make clean       remove build products"
+
+toolchain:
+	scripts/setup-toolchain.sh
+
+check: test asm-test
 
 test:
 	cd ref && $(PY) -m unittest -v test_ref
@@ -46,6 +60,10 @@ $(SATRUN): tools/satrun/satrun.c $(X48NG_SRC)/core/emulate.c $(X48NG_SRC)/core/r
 asm-test: asm $(SATRUN)
 	cd asm && $(PY) -m unittest discover -v -p 'test_*.py'
 
-# boots x48ng headless, talks to it over the emulated wire port (slow, ~1 min)
+# boots x48ng headless, talks to it over the emulated wire port (~3.5 min)
 e2e: asm app
 	$(PY) -m unittest -v tests/test_e2e.py tests/test_app.py
+
+clean:
+	rm -f asm/*.o asm/*.l asm/*.bin $(SATRUN) out/TOTP out/*.txt
+	rm -rf __pycache__ */__pycache__

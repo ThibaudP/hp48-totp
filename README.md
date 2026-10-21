@@ -41,6 +41,25 @@ How it works in depth (algorithm, Saturn code, object layouts, cable, pitfalls):
     `TZ` changes.
   - Each second, only the countdown is redrawn, in a single `REPL` (about 0.06 s).
 
+## Getting started
+
+```sh
+git clone https://github.com/ThibaudP/hp48-totp && cd hp48-totp
+make toolchain     # HP Tools, x48ng and the 48GX ROM, into ~/.local/share/hp48-emu
+make check         # Python reference + Saturn asm tests (seconds)
+make e2e           # end-to-end on a headless emulated 48GX (needs tmux, ~3.5 min)
+make asm app       # build HOTP and the app directory for the calculator
+```
+
+`make toolchain` needs a C compiler, autoconf, automake, curl, unzip and git, plus
+x48ng's build dependencies:
+
+- **Fedora:** `sudo dnf install lua-devel readline-devel ncurses-devel gtk4-devel tmux`
+- **Debian/Ubuntu:** `sudo apt install liblua5.4-dev libreadline-dev libncurses-dev libgtk-4-dev tmux`
+
+To put the toolchain somewhere else, set `HP48_EMU_HOME`. Python 3.10 or later
+is enough for the rest; nothing needs pip.
+
 ## Using it
 
 ### What you need
@@ -56,7 +75,7 @@ How it works in depth (algorithm, Saturn code, object layouts, cable, pitfalls):
 ```sh
 make asm app                                   # build HOTP and the TOTP directory
 python3 ref/make_hp_payload.py --import FILE   # or with no option, to type accounts in
-PORT=/dev/serial/by-id/usb-...
+PORT=/dev/serial/by-id/usb-...        # your USB-RS232 adapter (ls /dev/serial/by-id/)
 ```
 
 1. On the 48: go to `HOME`, then run `SERVER`. Then:
@@ -125,8 +144,12 @@ plan for 7–8 KB with a handful of accounts.
 
 ### Make targets
 
+`make` alone lists the main ones.
+
 | Target | What it does |
 |---|---|
+| `make toolchain` | Build HP Tools and x48ng and fetch the ROM (`scripts/setup-toolchain.sh`, safe to re-run) |
+| `make check` | `make test` + `make asm-test`, what CI runs |
 | `make test` | Python reference: SHA-1, HOTP/TOTP via HMAC and via midstates, payload format, otpauth import |
 | `make trace` | SHA-1 state after every round for the RFC vector (the reference for the asm) |
 | `make asm` | Assemble `asm/*.a` with HP Tools into `asm/*.bin` (HPHP48 binary objects) |
@@ -181,7 +204,8 @@ so it must be a fresh object, straight from `R→B`.
 
 ### Local toolchain (not in the repo)
 
-Everything lives in `~/.local/share/hp48-emu/`:
+`scripts/setup-toolchain.sh` puts everything in `$HP48_EMU_HOME`
+(default `~/.local/share/hp48-emu/`):
 
 - **`hptools/bin/`:** HP Tools 3.0.8 (`sasm`, `sload`, `rplcomp`).
   - Built from the hpcalc.org source with Jonathan Busby's 0.3.2.1 Linux patch
@@ -193,7 +217,11 @@ Everything lives in `~/.local/share/hp48-emu/`:
   - Its `-t` flag enables IR and crashes; `--serial=pty` is what opens the wire port.
 - **`x48ng-data/`:** the ROM (`gxrom-r` from hpcalc.org) and the config for x48ng.
   `tools/hp48.py` copies them into a temporary directory for each run.
-- **`wine/`:** Emu48 1.68 in its own Wine prefix, with the same ROM as `ROM.48G`.
+- **`wine/`** (optional, installed by hand): Emu48 1.68 in its own Wine prefix,
+  with the same ROM as `ROM.48G`. Only `make emu` uses it.
+
+The ROM comes from hpcalc.org, which distributes HP 48 ROMs for use in emulators
+with HP's permission. It isn't part of this repository.
 
 ### x48ng quirks handled by `tools/x48.sh` and `tools/hp48.py`
 
@@ -213,3 +241,14 @@ Everything lives in `~/.local/share/hp48-emu/`:
   existing variables.
 - **Parallel runs:** each run gets its own tmux session and data directory, so
   parallel runs don't collide.
+
+## Contributing
+
+Issues and pull requests are welcome. `make check` must pass; it runs in CI on
+every push. For anything that touches the calculator side, also run `make e2e`
+locally.
+
+## License
+
+[MIT](LICENSE). The HP 48 ROM, HP Tools and x48ng are not included and keep
+their own licenses.

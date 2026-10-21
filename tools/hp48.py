@@ -27,7 +27,8 @@ class CalcError(Exception):
     pass
 
 
-DATA = os.path.expanduser("~/.local/share/hp48-emu/x48ng-data")
+EMU_HOME = os.environ.get("HP48_EMU_HOME") or os.path.expanduser("~/.local/share/hp48-emu")
+DATA = os.path.join(EMU_HOME, "x48ng-data")
 ENV = dict(os.environ)
 
 

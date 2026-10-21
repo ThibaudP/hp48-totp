@@ -1,0 +1,22 @@
+name: check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y autoconf automake unzip
+      - name: Cache toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/hp48-emu
+          key: toolchain-${{ hashFiles('scripts/setup-toolchain.sh') }}
+      - name: Build toolchain (HP Tools + x48ng sources)
+        run: scripts/setup-toolchain.sh --minimal
+      - name: Python reference and Saturn asm tests
+        run: make check

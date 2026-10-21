@@ -216,8 +216,8 @@ or when storing).
 
 A 4-pin JST PH 2.0 connector (filed down to fit, in the 3D-printed housing
 Printables 380219) goes to a USB–RS232 adapter with real RS-232 levels, not TTL.
-The one in use is a Prolific, at
-`/dev/serial/by-id/usb-...`.
+A Prolific PL2303 adapter works. Use its stable name under `/dev/serial/by-id/`
+rather than `/dev/ttyUSB0`, which can change between plug-ins.
 
 The HP's pins are numbered from the outside in:
 

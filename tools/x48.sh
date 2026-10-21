@@ -8,8 +8,9 @@
 #   x48.sh pty           print the emulated wire port's device (for Kermit)
 #   x48.sh stop          quit
 set -eu
-DATA="${HP48_X48NG_DATA:-$HOME/.local/share/hp48-emu/x48ng-data}"
-BIN="${HP48_X48NG_BIN:-$HOME/.local/share/hp48-emu/src/x48ng/dist/x48ng}"
+EMU_HOME="${HP48_EMU_HOME:-$HOME/.local/share/hp48-emu}"
+DATA="${HP48_X48NG_DATA:-$EMU_HOME/x48ng-data}"
+BIN="${HP48_X48NG_BIN:-$EMU_HOME/src/x48ng/dist/x48ng}"
 S="${HP48_SESSION:-hp48}"
 DELAY=0.6
 
