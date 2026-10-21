@@ -1,0 +1,2 @@
+@ Run by OTP at start: scratch string, account list, OTP on the first soft key
+\<< MKWRK IF 'ACCTS' VTYPE -1 == THEN { } 'ACCTS' STO END { OTP } ORDER \>>

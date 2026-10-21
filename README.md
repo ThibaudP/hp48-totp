@@ -21,7 +21,6 @@ clock, with no network. It's an air-gapped backup in case the phone is lost.
   base32 secret, then computes everything on the 48. No PC needed after install.
 - **Auto power-off:** after 3 minutes without a key press the calculator turns
   off; ON brings the app back.
-- **Countdown:** refreshed every 2 s, to keep memory use low (see below).
 
 How it works in depth (algorithm, Saturn code, object layouts, cable, pitfalls):
 [DESIGN.md](DESIGN.md).
@@ -45,15 +44,23 @@ How it works in depth (algorithm, Saturn code, object layouts, cable, pitfalls):
     dynamic truncation. About 0.05 s per code at 48G speed.
   - `SHAC` (`asm/shac.a`): one compression on a state list, used to compute the
     midstates when you add an account.
-- **The app in User RPL** (`rpl/`):
+- **The app's main program in System RPL** (`srpl/otp.s`): the 48's internal
+  language, without argument checks and with small binary integers instead of
+  reals. It's about twice as fast as the User RPL version it replaced (▲▼ in
+  0.18 s, opening an account in 0.5 s) and allocates much less, which matters
+  more: see below.
+- **Helpers in User RPL** (`rpl/`): adding, renaming, deleting accounts, the
+  clock form, base32 and midstates, and small wrappers for commands System RPL
+  has no supported entry for (`WAIT`, `OFF`, `TIME`).
+- **The app as a whole:**
   - The clock is turned into Unix time with `TZ` as the UTC offset.
   - The screen is drawn into PICT and shown full screen with `PVIEW`, so the
     bottom row can hold the app's own key labels.
   - Built for a 48G's 32 KB: the loop allocates so little that garbage
     collection, which freezes the 48 for seconds, rarely kicks in. The clock
-    is read once per window, the countdown refreshes every 2 s, the next
-    window's codes are computed ahead, and screens are drawn straight into
-    PICT. Details in [DESIGN.md](DESIGN.md#garbage-collection).
+    is read once per window, the next window's codes are computed ahead, and
+    screens are drawn straight into display memory. Details in
+    [DESIGN.md](DESIGN.md#garbage-collection).
 
 ## Install
 
@@ -64,7 +71,7 @@ calculator: wire mode (`-33 CF`) and `IOPAR` set to `{ 9600 0 0 0 3 1 }`.
 **Back up your calculator first.** This is machine code, and a bug can clear
 the memory.
 
-The whole app is one file, [`dist/TOTP`](dist/TOTP), about 12 KB:
+The whole app is one file, [`dist/TOTP`](dist/TOTP), about 10 KB:
 
 1. On the 48, in `HOME`, start the Kermit server (`SERVER`).
 2. Send `dist/TOTP` with any Kermit program, in binary mode. With the one in
@@ -107,9 +114,9 @@ Check a code against your phone before relying on it.
 
 | Part | Size |
 |---|---|
-| The app | about 12 KB |
+| The app | about 10 KB |
 | Each account | about 200 B |
-| At run time | about 2–3 KB more (scratch string, screen, temporaries) |
+| At run time | about 2 KB more (scratch string, temporaries) |
 
 With a handful of accounts, keep about 15 KB free; more free memory means fewer
 pauses for garbage collection.
@@ -146,10 +153,11 @@ pauses for garbage collection.
 | Target | What it does |
 |---|---|
 | `make toolchain` | Build HP Tools and x48ng and fetch the ROM (`scripts/setup-toolchain.sh`, safe to re-run) |
-| `make check` | `make test` + `make asm-test`, what CI runs |
+| `make check` | `make test` + `make asm-test` + `make srpl`, what CI runs |
 | `make test` | Python reference: SHA-1, HOTP/TOTP via HMAC and via midstates, payload format, otpauth import |
 | `make trace` | SHA-1 state after every round for the RFC vector (the reference for the asm) |
 | `make asm` | Assemble `asm/*.a` with HP Tools into `asm/*.bin` (HPHP48 binary objects) |
+| `make srpl` | Compile `srpl/otp.s` (System RPL) with `rplcomp`, link it against the ROM entry points |
 | `make asm-test` | Run the asm routines on x48ng's CPU core (`tools/satrun`), with no ROM or UI |
 | `make app` | Build `out/TOTP`: the app directory (RPL programs + big digit font) as text |
 | `make dist` | Build `dist/TOTP`: the app with its machine code, as one binary directory, by installing it on the emulator and fetching it back |
@@ -191,7 +199,8 @@ pauses for garbage collection.
 |---|---|
 | `ref/` | Python reference, SHA-1 tracer, payload/ACCTS generator, their tests |
 | `asm/` | Saturn sources (`sha1.a`, `hotp.a`, `hello.a`), SLOAD control files, asm tests |
-| `rpl/` | App programs, one object per file, in `%%HP` text with `\<<` trigraphs |
+| `srpl/` | `otp.s`: the app's main program in System RPL |
+| `rpl/` | User RPL helpers, one object per file, in `%%HP` text with `\<<` trigraphs |
 | `tests/` | End-to-end tests on the emulator |
 | `tools/` | satrun, Kermit client, x48ng driver, GROB/screen codec, app builder, Emu48 launcher |
 | `dist/` | `TOTP`: the release, one binary directory object |
@@ -215,6 +224,8 @@ did, and fail with "Invalid Syntax" inside a directory.
 `scripts/setup-toolchain.sh` puts everything in `$HP48_EMU_HOME`
 (default `~/.local/share/hp48-emu/`):
 
+- **`hptools/entries/`:** the supported ROM entry points (`SupRomEntr.a` from
+  the GNU Tools for HP48), assembled into `entries.o` for linking System RPL.
 - **`hptools/bin/`:** HP Tools 3.0.8 (`sasm`, `sload`, `rplcomp`).
   - Built from the hpcalc.org source with Jonathan Busby's 0.3.2.1 Linux patch
     (`patch -p2`) and `CFLAGS="-O2 -std=gnu89 -fcommon -w"`.

@@ -8,8 +8,10 @@
 The calculator sits in Kermit server mode between calls; eval() leaves it,
 types and runs a command line, and goes back to server mode.
 """
+import atexit
 import os
 import re
+import signal
 import shutil
 import subprocess
 import sys
@@ -33,6 +35,15 @@ DATA = os.path.join(EMU_HOME, "x48ng-data")
 ENV = dict(os.environ)
 
 
+def reap_stale_sessions():
+    """Kill emulator sessions whose owning process is gone (hp48-<pid>)."""
+    out = subprocess.run(["tmux", "ls", "-F", "#{session_name}"], capture_output=True, text=True).stdout
+    for name in out.split():
+        pid = name[len("hp48-"):] if name.startswith("hp48-") else ""
+        if pid.isdigit() and not os.path.exists(f"/proc/{pid}"):
+            subprocess.run(["tmux", "kill-session", "-t", name], capture_output=True)
+
+
 def x48(*args):
     return subprocess.run([X48, *args], check=True, capture_output=True, text=True, env=ENV).stdout
 
@@ -41,11 +52,23 @@ class Emulator:
     def __enter__(self):
         # Own tmux session and data directory, so parallel runs (other shells,
         # other sessions) never drive or reset each other's emulator.
+        reap_stale_sessions()
         self.data = tempfile.mkdtemp(prefix="hp48-")
         for f in ("rom", "config.lua"):
             shutil.copy(os.path.join(DATA, f), self.data)
         ENV["HP48_SESSION"] = f"hp48-{os.getpid()}"
         ENV["HP48_X48NG_DATA"] = self.data
+        # An emulator left running burns a CPU core: stop it however we exit.
+        atexit.register(self.__exit__, None, None, None)
+        signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
+        try:
+            self._start()
+        except BaseException:
+            self.__exit__(None, None, None)
+            raise
+        return self
+
+    def _start(self):
         x48("start")
         self.kermit = None
         # -36 SF: received files overwrite existing variables (RUN is re-sent each eval).
@@ -56,7 +79,10 @@ class Emulator:
         return self
 
     def __exit__(self, *exc):
-        x48("stop")
+        if getattr(self, "stopped", False):
+            return
+        self.stopped = True
+        subprocess.run(["tmux", "kill-session", "-t", ENV["HP48_SESSION"]], capture_output=True)
         shutil.rmtree(self.data, ignore_errors=True)
 
     def server(self):

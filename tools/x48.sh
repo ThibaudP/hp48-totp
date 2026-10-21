@@ -72,7 +72,8 @@ screen)
     tmux capture-pane -p -t $S | sed -n '1,34p'
     ;;
 pty)
-    for p in $(pgrep -x x48ng); do
+    # this session's emulator only (other sessions may run their own)
+    for p in $(tmux list-panes -t $S -F '#{pane_pid}'); do
         for fd in /proc/$p/fd/*; do
             t=$(readlink "$fd")
             case "$t" in /dev/pts/*) [ "$fd" != /proc/$p/fd/0 ] && [ "$fd" != /proc/$p/fd/1 ] && [ "$fd" != /proc/$p/fd/2 ] && echo "$t" ;; esac

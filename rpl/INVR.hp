@@ -1,5 +1,0 @@
-@ y -> inverts the 131x8 row of PICT starting at y (moves the home selection
-@ without redrawing the screen)
-\<< \-> y
-  \<< PICT { #0d } y R\->B + PICT { #0d } y R\->B + { #130d } y 7 + R\->B + SUB NEG REPL \>>
-\>>

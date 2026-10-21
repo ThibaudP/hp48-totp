@@ -28,6 +28,7 @@ def setUpModule():
     hp.result()
     hp.send(os.path.join(ROOT, "asm", "hotp.bin"), "HOTP")
     hp.send(os.path.join(ROOT, "asm", "shac.bin"), "SHAC")
+    hp.send(os.path.join(ROOT, "srpl", "otp.bin"), "OTP")
     hp.send_text(accounts_source(RFC_ACCOUNTS), "ACCTS")
 
 
@@ -64,17 +65,6 @@ class Programs(unittest.TestCase):
     def test_fmt6_pads_zeros(self):
         hp.eval("50471 FMT6")
         self.assertEqual(hp.result(), '"050471"')
-
-
-class Screen(unittest.TestCase):
-    def test_account_screen_layout(self):
-        labels = '{ "BACK" "PREV" "NEXT" "TZ" "" "QUIT" } LBLS'
-        hp.eval(f'#131d #64d BLANK PICT STO "RFC 6238" "1/2 CEST" "110349" "287082" "902115" {labels} DDRAW 18 0 DTICK PICT RCL')
-        bitmap = hpgrob.from_grob(hp.result())
-        print("\n" + hpgrob.ascii_art(bitmap), file=sys.stderr)
-        self.assertEqual((len(bitmap[0]), len(bitmap)), (131, 64))
-        self.assertEqual(hpgrob.read_code(bitmap), "287082")
-        self.assertEqual(sum(bitmap[51][:100]), 18 * 3, "countdown bar width")
 
 
 ADD_NAME, ADD_SECRET = "TEST", "JBSWY3DPEHPK3PXP"
@@ -121,6 +111,8 @@ class LiveApp(unittest.TestCase):
         self.poll(check, "home view")
 
     def test_session(self):
+        # The screens themselves are checked here too: the account view's big
+        # digits and countdown bar, the home rows read with the 48's own font.
         (_, k1), (_, k2) = RFC_ACCOUNTS
         k3 = decode_b32(ADD_SECRET)
         hp.leave_server()

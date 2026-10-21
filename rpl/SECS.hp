@@ -1,0 +1,3 @@
+@ -> seconds within the minute, with hundredths (from TIME's HH.MMSSss).
+@ unix mod 30 = these seconds mod 30, since time zones are whole hours.
+\<< TIME 100 * FP 100 * \>>

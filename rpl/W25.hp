@@ -1,0 +1,2 @@
+@ OTP's idle step: a quarter of a second (WAIT has no System RPL entry)
+\<< .25 WAIT \>>

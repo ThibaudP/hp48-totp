@@ -193,73 +193,71 @@ and `HOTP` would write over whatever object that is.
 
 ## The app
 
-### Variables
+### Programs
+
+The main program `OTP` is System RPL (`srpl/otp.s`), compiled by `rplcomp`,
+assembled by `sasm` and linked by `sload` against the supported ROM entry
+points. Its state lives in 22 numbered local variables (listed at the top of
+the source). Everything else is User RPL, called by name:
 
 | Variable | Role |
 |---|---|
-| `OTP` | The app: the main loop, `KEY` polling, `PVIEW`, the three modes (home, account, move), auto power-off. It moves itself to the first soft key. Its locals have one-letter names, listed at the top of the source, because User RPL stores a local's name at every use. |
-| `HDRAW`, `HCODES`, `HTICK`, `INVR` | home view: full draw into PICT; codes only (new window); seconds and bar; invert a row (selection) |
-| `DDRAW`, `DCODES`, `DTICK` | account view: full draw into PICT; previous / current / next code only; seconds and bar |
-| `LBLS`, `CTXT`, `TZL`, `FMT6`, `FMT7` | key labels, centered text, time zone label, code formatting |
-| `CODE` | account index, counter → 6-digit string (calls `HOTP`) |
-| `UNIX` | clock → Unix time |
+| `OTP` | The app (System RPL): main loop, keyboard (`GETTOUCH`), drawing into the display (`HARDBUFF`, `GROB!`, `GROB!ZERO`, `INVGROB`), codes (calls `HOTP`) |
+| `INIT` | creates `WRK` and `ACCTS` if missing, puts `OTP` on the first soft key |
+| `SECS`, `UNIX` | seconds within the minute (from `TIME`), Unix time |
+| `W25`, `OFFH` | `.25 WAIT` and `OFF`, which have no supported System RPL entry |
+| `LBLS`, `TZL`, `DIGS` | soft key labels, time zone label, the large digits (15×21 GROBs, a 5×7 font scaled ×3, generated in Python) |
 | `ADDA`, `RENA`, `DELA`, `TIMEA`, `SWAP2` | ADD, REN, DEL, TIME and MOVE |
 | `B32D`, `PADB`, `MIDS` | base32 decoding and midstates on the calculator (calls `SHAC`) |
-| `MKWRK` | creates `WRK`, the scratch string the machine code works in |
-| `DIGS` | the large digits 0–9 as 15×21 GROBs (a 5×7 font scaled ×3, generated in Python) |
+| `CODE`, `FMT6`, `MKWRK` | a code from User RPL (kept for tests and by hand), 6-digit formatting, the scratch string |
 | `TZ`, `ACCTS`, `HOTP`, `SHAC`, `WRK` | data, the machine code and the scratch string |
 
 ### Display
 
-- **Drawing in PICT.** `→LCD` only covers the 56 stack lines, so the soft key row
-  would stay the system menu. The app draws in PICT and shows it with
-  `{ #0 #0 } PVIEW`, which covers all 64 lines, including its own key labels.
-- **PICT is only changed in place**, never re-stored while it's on screen.
-  Re-storing it caused a second of garbage at each new code. A full redraw is
-  `ERASE` followed by `REPL`s straight into PICT, with no full-screen GROB built.
+- **Full screen.** `RECLAIMDISP` then `TURNMENUOFF` give the program the whole
+  131×64 display (`HARDBUFF`), including the soft key row, where it draws its
+  own labels. On exit, `TURNMENUON` and `ClrDAsOK` hand the screen back.
 - **Three levels of redraw:**
-  - full screen (`HDRAW`, `DDRAW`): on an account change, a mode change, TZ, or
-    an edit;
-  - codes only (`HCODES`, `DCODES`): on a new 30 s window;
-  - countdown only (`HTICK`, `DTICK`): every 2 s. It erases just the slices of
-    the bar that passed and rewrites the 3-character seconds.
-- **Selection moves in place.** In the home view, ▲▼ invert the two rows
-  concerned (`INVR`); the list is redrawn only when it scrolls, one page at a time.
+  - full screen: on an account change, a mode change, TZ, or an edit;
+  - codes only: on a new 30 s window;
+  - countdown only: every second. It clears the part of the bar that passed
+    with `GROB!ZERO` and rewrites the 3-character seconds.
+- **Selection moves in place.** In the home view, ▲▼ redraw the two rows
+  concerned; the list is redrawn only when it scrolls, one page at a time.
 - **Input screens.** ADD and REN use `INPUT` rather than `INFORM`: INPUT returns
   the typed text as is, while INFORM would parse a base32 secret as an object.
   DEL confirms with `CHOOSE`, and TIME is an `INFORM` with numeric fields.
-- **Auto power-off.** After 3 minutes without a key press, `OFF` turns the
-  calculator off from inside the program. ON resumes the app, which then redraws
-  everything.
+- **Auto power-off.** After 3 minutes without a key press the calculator turns
+  off; ON resumes the app, which redraws everything.
 
 ### Garbage collection
 
 A 48G with the app and a few accounts has about 12 KB free. The 48 collects
-garbage when temporary memory runs out, and a collection inside the app takes
-one to several seconds. The first versions allocated so much that this happened
-every few seconds, which showed up as freezes of 2–5 s. The loop is now built
-to allocate less in a 30 s window than there is free memory:
+garbage when temporary memory runs out, and a collection inside a busy program
+takes one to several seconds. The first versions allocated so much that this
+happened every few seconds, which showed up as freezes of 2–5 s.
 
-- **Clock:** read once per window (`UNIX`, plus `TIME`'s hundredths). In
-  between, the current second is derived from `TICKS`.
-- **Waiting:** polls the keyboard every 0.25 s until a key or the next refresh.
-- **Countdown:** refreshed every 2 s, not every second.
-- **Codes:** the next window's codes are computed ahead, one per countdown
-  refresh. A new window then only redraws.
+- **Clock:** the countdown needs only the seconds within the minute (Unix time
+  mod 30 equals local seconds mod 30, time zones being whole hours), read with
+  `TIME`. The full Unix time is read once per 30 s window, to compute codes.
+- **Codes:** the next window's codes are computed ahead, one per second, so a
+  new window only redraws.
+- **System RPL:** counters and coordinates are small binary integers, many of
+  them built into the ROM, instead of 10.5-byte reals.
 - **No forced collection.** Calling `MEM` to collect at a chosen moment took
   3.3 s inside the app, worse than letting the 48 collect when it must.
 
-On the emulator with 13 KB free, freezes longer than 1.5 s in 70 s went from 19
-(up to 5.6 s) to a few short hiccups. To reproduce that, leave the app the same
-free memory as a 48G: emulators are usually 48GX with 128 KB, where none of this
-shows.
+Measured on the emulator with 13 KB free, freezes longer than 1.5 s in 70 s
+went from 19 (up to 5.6 s, first User RPL version) to 2 (up to 1.9 s). To
+reproduce that, give the emulator the same free memory as a 48G: emulators are
+usually 48GX with 128 KB, where none of this shows.
 
 ### Layouts (131×64)
 
 | Rows (y) | Home view | Account view |
 |---|---|---|
 | 0–7 | `TOTP` · seconds, time zone | name · `3/9 CEST` |
-| 0–7, x=80 | seconds (every 2 s) | |
+| 0–7, x=80 | seconds | |
 | 9–10 | countdown (2 px) | |
 | 9–16 | | `prev  110 349` |
 | 12–51 | 5 rows: name · code, the selected one inverted | |
@@ -272,26 +270,21 @@ shows.
 
 | Step | Time |
 |---|---|
-| One code (HOTP) | 0.05 s (`CODE`, with its RPL around it: 0.1 s) |
-| ▲▼ in the home view | about 0.35 s |
-| Opening an account, PREV / NEXT | about 0.9 s |
-| New 30 s window | codes already computed: only the redraw (about 0.6 s home) |
-| Countdown, every 2 s | about 0.1 s |
+| One code (HOTP) | 0.05 s |
+| ▲▼ in the home view | about 0.2 s |
+| Opening an account | about 0.5 s |
+| PREV / NEXT | about 0.7 s |
+| BACK to the home view | about 0.4 s |
 | Adding an account (midstates) | a few seconds |
 
 ### RAM
 
 | Part | Size |
 |---|---|
-| `dist/TOTP` (programs, font, HOTP, SHAC) | about 12 KB; `OTP` alone is about 3.5 KB |
+| `dist/TOTP` (programs, font, HOTP, SHAC, OTP) | about 10 KB; `OTP` alone is 4.6 KB |
 | Each account | about 200 B |
-| WRK and PICT | about 1.4 KB, created at run time |
+| WRK | about 0.4 KB, created at run time |
 | Temporaries while running | a few KB, collected now and then |
-
-Numbers cost a lot in User RPL: every real other than the few built into the ROM
-takes 10.5 bytes, and every binary integer (`#131d`) 13. Coordinates and key
-codes are most of the size. A System RPL rewrite could roughly halve it, and
-would also allocate less.
 
 ### Names
 

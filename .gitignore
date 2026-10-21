@@ -5,3 +5,8 @@ asm/*.l
 asm/*.bin
 tools/satrun/satrun
 *.pyc
+srpl/*.a
+srpl/*.o
+srpl/*.l
+srpl/*.m
+srpl/*.bin

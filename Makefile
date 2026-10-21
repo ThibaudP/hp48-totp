@@ -7,11 +7,11 @@ SATRUN = tools/satrun/satrun
 # x48ng's headers include Lua's (Fedora: lua-devel, Debian/Ubuntu: liblua5.4-dev)
 LUA_CFLAGS ?= $(shell pkg-config --cflags lua5.4 2>/dev/null || pkg-config --cflags lua 2>/dev/null)
 
-.PHONY: help toolchain check dist test vectors trace payload-rfc app emu emu-rpl asm satrun asm-test e2e clean
+.PHONY: help toolchain check dist srpl test vectors trace payload-rfc app emu emu-rpl asm satrun asm-test e2e clean
 
 help:
 	@echo "make toolchain   build HP Tools, x48ng and fetch the ROM into $(HP48_EMU_HOME)"
-	@echo "make check       Python reference tests + Saturn asm tests (fast)"
+	@echo "make check       Python reference tests, Saturn asm tests, System RPL build (fast)"
 	@echo "make e2e         end-to-end tests on a headless emulated 48GX (~3.5 min)"
 	@echo "make asm app     build the machine code (asm/*.bin) and the app directory (out/TOTP)"
 	@echo "make dist        dist/TOTP: the whole app as one binary file (built on the emulator)"
@@ -20,7 +20,7 @@ help:
 toolchain:
 	scripts/setup-toolchain.sh
 
-check: test asm-test
+check: test asm-test srpl
 
 test:
 	cd ref && $(PY) -m unittest -v test_ref
@@ -54,6 +54,16 @@ asm: $(patsubst %.a,%.bin,$(wildcard asm/*.a))
 asm/%.bin: asm/%.a asm/%.m
 	cd asm && $(HPTOOLS)/sasm $*.a && $(HPTOOLS)/sload -H $*.m > /dev/null
 
+# srpl/NAME.s -> srpl/NAME.bin: System RPL, compiled by rplcomp, linked with the
+# supported ROM entry points (built by scripts/setup-toolchain.sh)
+ENTRIES ?= $(HP48_EMU_HOME)/hptools/entries/entries.o
+srpl: srpl/otp.bin
+
+srpl/%.bin: srpl/%.s
+	cd srpl && $(HPTOOLS)/rplcomp $*.s $*.a && $(HPTOOLS)/sasm $*.a \
+	  && printf 'OPTION CODE\nOUTPUT $*.bin\nRELOCATE $*.o\nSEARCH $(ENTRIES)\nEND\n' > $*.m \
+	  && $(HPTOOLS)/sload -H $*.m > /dev/null
+
 # x48ng's Saturn CPU core with flat memory, for unit-testing asm routines
 satrun: $(SATRUN)
 
@@ -64,13 +74,13 @@ asm-test: asm $(SATRUN)
 	cd asm && $(PY) -m unittest discover -v -p 'test_*.py'
 
 # boots x48ng headless, talks to it over the emulated wire port (~3.5 min)
-e2e: asm app dist
+e2e: asm srpl app dist
 	$(PY) -m unittest -v tests/test_e2e.py tests/test_app.py tests/test_dist.py
 
 # dist/TOTP: install the app on the emulator, fetch the directory back in binary
-dist: asm app
+dist: asm srpl app
 	$(PY) tools/build_dist.py
 
 clean:
-	rm -f asm/*.o asm/*.l asm/*.bin $(SATRUN) out/TOTP out/*.txt
+	rm -f asm/*.o asm/*.l asm/*.bin srpl/*.a srpl/*.o srpl/*.l srpl/*.m srpl/*.bin $(SATRUN) out/TOTP out/*.txt
 	rm -rf __pycache__ */__pycache__

@@ -172,7 +172,7 @@ class Kermit:
         # R (receive-init) asks the server to start sending NAME.
         return self.receive(make_packet(0, "R", name.encode("latin-1")), name)
 
-    def host(self, command):
+    def host(self, command, wait=30):
         """REMOTE HOST: the server evaluates `command` as a command line and sends
         back the result (level 1, as transfer text) like a file."""
         from hp2emu import TRIGRAPHS
@@ -185,7 +185,7 @@ class Kermit:
         for attempt in range(5):
             try:
                 return self.receive(make_packet(0, "C", encode(text.encode("latin-1"))), command,
-                                    resend=False, wait=300)
+                                    resend=False, wait=wait)
             except KermitError as e:
                 if "Invalid Server Cmd" not in str(e) or attempt == 4:
                     raise

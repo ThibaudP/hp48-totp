@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Build dist/TOTP: the whole app as one binary directory object, for a one-file install.
 
-Installs the app on a headless emulated 48GX (the text directory, HOTP and SHAC
-machine code, an empty account list), then fetches the directory back in binary
+Installs the app on a headless emulated 48GX (the text directory, the HOTP and
+SHAC machine code, the System RPL OTP, an empty account list), then fetches the directory back in binary
 transfer mode.  Users send that single file to the calculator, enter TOTP, run OTP
 and add their accounts with ADD.  Needs `make asm app` and the full toolchain.
 """
@@ -25,6 +25,7 @@ def main():
         hp.result()
         hp.send(os.path.join(ROOT, "asm", "hotp.bin"), "HOTP")
         hp.send(os.path.join(ROOT, "asm", "shac.bin"), "SHAC")
+        hp.send(os.path.join(ROOT, "srpl", "otp.bin"), "OTP")
         hp.send_text("{ }", "ACCTS")
         # eval() leaves RUN and RSLT in the current directory: go back HOME by
         # hand, then clean TOTP from a RUN that lives in HOME.

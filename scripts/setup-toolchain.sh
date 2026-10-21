@@ -53,6 +53,17 @@ if [ ! -x "$H/hptools/bin/sasm" ]; then
     done
 fi
 
+# Supported ROM entry points (from the GNU Tools for HP48), assembled for SLOAD:
+# what System RPL code (srpl/) is linked against.
+if [ ! -s "$H/hptools/entries/entries.o" ]; then
+    echo "== ROM entry points"
+    fetch "$HPCALC/programming" gtlnx-21.tgz
+    mkdir -p "$H/hptools/entries"
+    tar -xzf "$H/dl/gtlnx-21.tgz" -C "$H/hptools/entries" --strip-components=1 gtools-2.1.9-linux/SupRomEntr.a
+    mv "$H/hptools/entries/SupRomEntr.a" "$H/hptools/entries/entries.a"
+    (cd "$H/hptools/entries" && quiet "$H/hptools/bin/sasm" -N entries.a)
+fi
+
 # x48ng: its CPU core is compiled into tools/satrun; the full emulator runs `make e2e`.
 if [ ! -d "$H/src/x48ng/src/core" ]; then
     echo "== x48ng $X48NG_TAG"
