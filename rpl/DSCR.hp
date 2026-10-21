@@ -7,11 +7,13 @@
     { #0d #0d } name 2 \->GROB REPL
     hdr 2 \->GROB DUP SIZE DROP #131d SWAP - #0d 2 \->LIST SWAP REPL
     "prev  " pc FMT7 + 9 CTXT
-    1 6 FOR k
-      k 1 - 17 * 11 + k 3 > 6 * + R\->B #18d 2 \->LIST
-      DIGS code k k SUB NUM 47 - GET
-      REPL
-    NEXT
+    { { #11d #18d } { #28d #18d } { #45d #18d } { #68d #18d } { #85d #18d } { #102d #18d } }
+    \-> xy
+    \<<
+      1 6 FOR k
+        xy k GET DIGS code k k SUB NUM 47 - GET REPL
+      NEXT
+    \>>
     "next  " nc FMT7 + 40 CTXT
     { #0d #56d } lbls REPL
   \>>
