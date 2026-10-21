@@ -4,85 +4,123 @@
 @ Account (mode 1): previous / current (big) / next code; BACK (or left),
 @   PREV/NEXT (or up/down) switch account, TZ toggles CET/CEST, QUIT.
 @ Move (mode 2): up/down move the selected account; ENTER or MOVE ends.
+@
+@ Built for a 48G with little free RAM, where garbage collection is the enemy:
+@ - between events the loop only polls the keyboard (every 0.25 s) until two
+@   seconds have passed or a key; the clock is read once per 30 s window, the
+@   seconds in between come from TICKS;
+@ - every 2 s the countdown only erases the slices of the bar that passed and
+@   rewrites the 3-character seconds (every second would allocate more than a
+@   48G's free RAM over a 30 s window, forcing a collection mid-window);
+@ - screens are drawn straight into PICT (ERASE, then REPLs): no full-screen
+@   GROB is built; a new 30 s window only rewrites the codes (HCODES, DCODES);
+@ - the next window's codes are computed ahead, one per countdown refresh, so
+@   a new window has nothing left to compute;
+@ Codes are cached per 30 s window: the home list (h, window g) and the open
+@ account's previous / current / next (d, account f, window j).  The home
+@ selection moves by inverting two rows; the list scrolls by pages.
 @ Drawn in PICT, shown full screen with PVIEW, only updated in place (REPL).
-@ Codes are cached per 30 s window: the home list (hv, for window hc) and the
-@ open account's previous / current / next (dv, for account ds and window dc).
-@ The static screen is redrawn (q) only when something shown changes; moving
-@ the home selection just inverts two rows; each second only the countdown is
-@ redrawn.  After 3 minutes without a key the calculator turns off; ON resumes.
+@ After 3 minutes without a key the calculator turns off; ON resumes.
 @ Locals (one letter: User RPL stores a local's name at every use):
 @   a b  home / account key labels    m mode    s selected account   t first row
-@   h    home codes (hv)   g its window (hc)    d account codes (dv)
-@   f    their account (ds)   j their window (dc)    w last second drawn
+@   h g  home codes and their window   d f j  account codes, account, window
+@   w    last second drawn (-1: redraw the countdown in full)
 @   z    TICKS at the last key    q redraw    e done
-@   y    copy of the home screen while an account is open (0: none)
+@   x i  home codes for the next window (window g+1), filled one per countdown
+@        refresh, and the next index to compute
+@   y r  the open account's code two windows ahead (window j+2) and its account
+@   o p  Unix second and TICKS at the start of that second, read once per
+@        window: the current second is o + (TICKS - p) / 8192, which costs far
+@        less memory than reading the clock every second
 \<<
   MKWRK { OTP } ORDER
   IF 'ACCTS' VTYPE -1 == THEN { } 'ACCTS' STO END
+  RCLF -55 SF
   { "ADD" "REN" "DEL" "MOVE" "TIME" "QUIT" } LBLS
   { "BACK" "PREV" "NEXT" "TZ" "" "QUIT" } LBLS
   #131d #64d BLANK PICT STO { #0d #0d } PVIEW
-  0 1 1 { } -1 { } 0 -1 -1 TICKS 1 0 0
-  \-> a b m s t h g d f j w z q e y
+  0 1 1 { } -1 { } 0 -1 -1 TICKS 1 0 0 #0d { } 1 "" 0
+  \-> a b m s t h g d f j w z q e o p x i y r
   \<<
     DO
-      ACCTS SIZE \-> n
+      o TICKS p - B\->R 8192 / IP +
+      \-> u
       \<<
-        IF s n > THEN n 1 MAX 's' STO 1 'q' STO END
-        IF n 0 == m 1 == AND THEN 0 'm' STO 1 'q' STO END
-        UNIX \-> u
-        \<<
-          u 30 / IP \-> c
+        IF q w -1 == OR u 30 / IP w 30 / IP \=/ OR THEN
+          UNIX TICKS TIME 10000 * FP 8192 * R\->B - 'p' STO 'o' STO
+          ACCTS SIZE \-> n
           \<<
-            IF m 1 == THEN
-              IF j c \=/ f s \=/ OR THEN
-                s c 1 - CODE
-                IF g c == THEN h s GET ELSE s c CODE END
-                s c 1 + CODE 3 \->LIST 'd' STO
-                c 'j' STO s 'f' STO 1 'q' STO
-              END
-            ELSE
-              IF g c \=/ THEN
-                0 'y' STO
-                IF n THEN 1 n FOR k k c CODE NEXT n \->LIST ELSE { } END
-                'h' STO c 'g' STO 1 'q' STO
-              END
-            END
-            IF q THEN
-              PICT { #0d #0d }
+            IF s n > THEN n 1 MAX 's' STO 1 'q' STO END
+            IF n 0 == m 1 == AND THEN 0 'm' STO 1 'q' STO END
+            o 30 / IP \-> c
+            \<<
               IF m 1 == THEN
-                ACCTS s GET 1 GET
-                s \->STR "/" + n \->STR + " " + TZL +
-                d LIST\-> DROP b DSCR
+                IF j c \=/ f s \=/ OR THEN
+                  IF c j 1 + == f s == AND r s == AND y SIZE AND THEN
+                    d 2 GET d 3 GET y 3 \->LIST
+                  ELSE
+                    s c 1 - CODE
+                    IF g c == THEN h s GET ELSE s c CODE END
+                    s c 1 + CODE 3 \->LIST
+                  END
+                  'd' STO "" 'y' STO
+                  IF f s == q NOT AND THEN d LIST\-> DROP DCODES ELSE 1 'q' STO END
+                  c 'j' STO s 'f' STO
+                END
               ELSE
-                h s t a HSCR
+                IF g c \=/ THEN
+                  IF c g 1 + == i n > AND THEN x
+                  ELSE IF n THEN 1 n FOR k k c CODE NEXT n \->LIST ELSE { } END
+                  END
+                  'h' STO { } 'x' STO 1 'i' STO
+                  IF g -1 \=/ q NOT AND THEN h s t HCODES ELSE 1 'q' STO END
+                  c 'g' STO
+                END
               END
-              REPL
-              0 'q' STO -1 'w' STO
-            END
-            IF u w \=/ THEN
-              u 'w' STO
-              30 u 30 MOD -
-              IF m 1 == THEN DTICK ELSE m 2 == "MOVE" TZL IFTE HTICK END
-            END
+              IF q THEN
+                IF m 1 == THEN
+                  ACCTS s GET 1 GET
+                  s \->STR "/" + n \->STR + " " + TZL +
+                  d LIST\-> DROP b DDRAW
+                ELSE
+                  h s t a m 2 == "MOVE" TZL IFTE HDRAW
+                END
+                0 'q' STO
+              END
+              30 o 30 MOD - 0
+              IF m 1 == THEN DTICK ELSE HTICK END
+              o 'w' STO
+            \>>
           \>>
-        \>>
-        IF KEY THEN
+        ELSE
+          IF u w \=/ THEN
+            30 u 30 MOD - u w -
+            IF m 1 == THEN DTICK ELSE HTICK END
+            u 'w' STO
+            CASE
+              m 1 == y SIZE NOT AND THEN s j 2 + CODE 'y' STO s 'r' STO END
+              m 1 \=/ i ACCTS SIZE \<= AND THEN x i g 1 + CODE 1 \->LIST + 'x' STO i 1 + 'i' STO END
+            END
+          END
+        END
+      \>>
+      0 1 w o - 2 + 8192 * TICKS p - B\->R - 8192 / .02 MAX 4 * CEIL
+      START
+        IF DUP NOT THEN IF KEY THEN SWAP DROP ELSE .25 WAIT END END
+      NEXT
+      \-> k
+      \<<
+        IF k THEN
           TICKS 'z' STO
-          \-> k
+          ACCTS SIZE \-> n
           \<<
             CASE
               m 1 == THEN
                 CASE
-                  k 11 == k 34 == OR THEN
-                    0 'm' STO
-                    IF y TYPE 11 == g UNIX 30 / IP == AND THEN
-                      PICT { #0d #0d } y REPL -1 'w' STO
-                    ELSE 1 'q' STO END
-                  END
-                  k 12 == k 25 == OR THEN s 2 - n MOD 1 + 's' STO 0 'y' STO END
-                  k 13 == k 35 == OR THEN s n MOD 1 + 's' STO 0 'y' STO END
-                  k 14 == THEN 3 TZ - 'TZ' STO 0 'y' STO 1 'q' STO END
+                  k 11 == k 34 == OR THEN 0 'm' STO 1 'q' STO END
+                  k 12 == k 25 == OR THEN s 2 - n MOD 1 + 's' STO END
+                  k 13 == k 35 == OR THEN s n MOD 1 + 's' STO END
+                  k 14 == THEN 3 TZ - 'TZ' STO 1 'q' STO END
                   k 16 == THEN 1 'e' STO END
                 END
               END
@@ -96,23 +134,26 @@
                     ACCTS s s 1 + SWAP2 'ACCTS' STO h s s 1 + SWAP2 'h' STO
                     s 1 + 's' STO 1 'q' STO
                   END
-                  k 51 == k 14 == OR THEN 0 'm' STO -1 'w' STO END
+                  k 51 == k 14 == OR THEN 0 'm' STO 1 'q' STO END
                 END
               END
               CASE
                 k 25 == k 35 == OR n AND THEN
                   s k 25 == -1 1 IFTE + 1 MAX n MIN \-> v
                   \<<
-                    IF v t < v t 4 + > OR THEN 1 'q' STO
-                    ELSE s t - 8 * 12 + INVR v t - 8 * 12 + INVR END
+                    CASE
+                      v t < THEN v 4 - 1 MAX 't' STO 1 'q' STO END
+                      v t 4 + > THEN v 't' STO 1 'q' STO END
+                      v s \=/ THEN s t - 8 * 12 + INVR v t - 8 * 12 + INVR END
+                    END
                     v 's' STO
                   \>>
                 END
-                k 51 == k 36 == OR n AND THEN PICT RCL 'y' STO 1 'm' STO 1 'q' STO END
-                k 11 == THEN IF ADDA THEN ACCTS SIZE 's' STO 1 'm' STO END -1 'g' STO -1 'j' STO 0 'y' STO 1 'q' STO END
+                k 51 == k 36 == OR n AND THEN 1 'm' STO 1 'q' STO END
+                k 11 == THEN IF ADDA THEN ACCTS SIZE 's' STO 1 'm' STO END -1 'g' STO -1 'j' STO 1 'q' STO END
                 k 12 == n AND THEN s RENA 1 'q' STO END
                 k 13 == n AND THEN s DELA DROP -1 'g' STO -1 'j' STO 1 'q' STO END
-                k 14 == n 1 > AND THEN 2 'm' STO -1 'w' STO END
+                k 14 == n 1 > AND THEN 2 'm' STO 1 'q' STO END
                 k 15 == THEN TIMEA 1 'q' STO END
                 k 16 == THEN 1 'e' STO END
               END
@@ -124,9 +165,10 @@
         ELSE
           IF TICKS z - B\->R 8192 / 180 > THEN
             OFF TICKS 'z' STO 1 'q' STO { #0d #0d } PVIEW
-          ELSE .1 WAIT END
+          END
         END
       \>>
     UNTIL e END
   \>>
+  STOF
 \>>

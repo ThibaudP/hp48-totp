@@ -69,7 +69,7 @@ class Programs(unittest.TestCase):
 class Screen(unittest.TestCase):
     def test_account_screen_layout(self):
         labels = '{ "BACK" "PREV" "NEXT" "TZ" "" "QUIT" } LBLS'
-        hp.eval(f'"RFC 6238" "1/2 CEST" "110349" "287082" "902115" {labels} DSCR PICT STO 18 DTICK PICT RCL')
+        hp.eval(f'#131d #64d BLANK PICT STO "RFC 6238" "1/2 CEST" "110349" "287082" "902115" {labels} DDRAW 18 0 DTICK PICT RCL')
         bitmap = hpgrob.from_grob(hp.result())
         print("\n" + hpgrob.ascii_art(bitmap), file=sys.stderr)
         self.assertEqual((len(bitmap[0]), len(bitmap)), (131, 64))

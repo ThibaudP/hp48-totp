@@ -1,0 +1,11 @@
+@ codes, selected index, first visible row -> rewrites only the codes of the
+@ visible home rows (new 30 s window): six small GROBs, nothing else redrawn
+\<< \-> codes sel top
+  \<<
+    top top 4 + ACCTS SIZE MIN FOR k
+      codes k GET FMT7 2 \->GROB
+      IF k sel == THEN NEG END
+      PICT k top - 8 * 12 + R\->B #87d SWAP 2 \->LIST ROT REPL
+    NEXT
+  \>>
+\>>

@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, TOOLS)
@@ -78,6 +79,22 @@ class Emulator:
             x48("keys", "F5")
             self.server()
             return fn(*args)
+
+    def host(self, command):
+        """Evaluate a command line on the calculator (Kermit REMOTE HOST) and
+        return the stack it shows afterwards, as text."""
+        for attempt in range(3):
+            try:
+                return self.kermit.host(command).decode("latin-1").replace("\r\n", "\n")
+            except KermitError as e:
+                if "Invalid Server Cmd" in str(e):  # still finishing the last transfer
+                    time.sleep(1)
+                    continue
+                if attempt == 2 or ("timed out" not in str(e) and "no ACK" not in str(e)):
+                    raise
+                x48("keys", "F5")  # wire port stalled: restart server mode
+                self.server()
+        raise KermitError(f"host command failed: {command}")
 
     def send(self, path, name):
         with open(path, "rb") as f:

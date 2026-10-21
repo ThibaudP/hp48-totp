@@ -178,25 +178,32 @@ class Kermit:
         from hp2emu import TRIGRAPHS
         text = re.sub(r"\\(\d{3}|..)", lambda m: chr(int(m.group(1))) if m.group(1).isdigit()
                       else chr(TRIGRAPHS.get(m.group(1), ord("?"))), command)
-        return self.receive(make_packet(0, "C", encode(text.encode("latin-1"))), command)
+        # Never re-sent: the server would evaluate it again.  It answers once the
+        # command has run, which can take a while.
+        return self.receive(make_packet(0, "C", encode(text.encode("latin-1"))), command, resend=False, wait=300)
 
-    def receive(self, request, name):
-        """Send a request packet, then receive the transfer the server answers with."""
+    def receive(self, request, name, resend=True, wait=None):
+        """Send a request packet, then receive the transfer the server answers with.
+        Before the transfer starts, silence is answered by re-sending the request
+        (if `resend`) or by waiting up to `wait` seconds."""
         self.port.write(request)
         data, expect, started, requests = bytearray(), 0, False, 1
         # The deadline only covers silence: big objects take a while to decompile and send.
-        deadline = time.time() + self.timeout * self.retries
+        deadline = time.time() + (wait or self.timeout * self.retries)
         while time.time() < deadline:
             r = self.port.read_packet(self.timeout)
             if r is None:
                 # Before the transfer starts, ask again (a NAK would read as an unknown
                 # server command); during it, NAK the packet we wait for so it is resent.
-                self.port.write(make_packet(expect, "N") if started else request)
+                if started:
+                    self.port.write(make_packet(expect, "N"))
+                elif resend:
+                    self.port.write(request)
                 continue
             deadline = time.time() + self.timeout * self.retries
             seq, typ, pdata = r
             self.log("<", seq, typ, pdata[:40])
-            if typ == "E" and not started and requests < self.retries:
+            if typ == "E" and not started and resend and requests < self.retries:
                 # The server may still be finishing the previous transaction when the
                 # request arrives ("Invalid Server Cmd."): give it a moment and retry.
                 time.sleep(1)

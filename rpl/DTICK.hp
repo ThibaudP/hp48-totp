@@ -1,10 +1,17 @@
-@ seconds left -> countdown bar and seconds drawn into PICT at y=48 (one REPL)
-\<< \-> left
+@ seconds left, full? -> countdown of the account view, drawn into PICT
+@ (OTP draws the per-second updates itself from TBLS; this is for full draws).
+@ full: the whole bar (after a redraw); otherwise only the 3 px of the second
+@ that just passed are erased.  The seconds are always 3 characters wide, so
+@ they overwrite the previous value.  Allocates little: on a 48G with ~13 KB
+@ free, every byte made each second brings the next garbage collection closer.
+\<< \-> l f
   \<<
-    PICT { #0d #48d }
-    #131d #8d BLANK
-    IF left 0 > THEN { #2d #2d } left 3 * R\->B #4d BLANK NEG REPL END
-    left \->STR "s" + 2 \->GROB DUP SIZE DROP #131d SWAP - #0d 2 \->LIST SWAP REPL
-    REPL
+    IF f NOT THEN
+      PICT { #2d #50d } #90d #4d BLANK REPL
+      IF l 0 > THEN PICT { #2d #50d } l 3 * R\->B #4d BLANK NEG REPL END
+    ELSE
+      PICT l 3 * 2 + R\->B #50d 2 \->LIST f 3 * R\->B #4d BLANK REPL
+    END
+    PICT { #113d #48d } l 10 < " " "" IFTE l \->STR + "s" + 2 \->GROB REPL
   \>>
 \>>

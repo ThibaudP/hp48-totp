@@ -1,0 +1,16 @@
+@ previous, current, next code -> draws them into PICT: "prev  110 349",
+@ the big digits, "next  902 115" (fixed widths, so they overwrite in place).
+@ Layout must match tools/hpgrob.py (big digits at x=11+17k (+6 after the 3rd), y=18).
+\<< \-> pc code nc
+  \<<
+    PICT "prev  " pc FMT7 + 9 CTXT
+    { { #11d #18d } { #28d #18d } { #45d #18d } { #68d #18d } { #85d #18d } { #102d #18d } }
+    \-> xy
+    \<<
+      1 6 FOR k
+        PICT xy k GET DIGS code k k SUB NUM 47 - GET REPL
+      NEXT
+    \>>
+    PICT "next  " nc FMT7 + 40 CTXT
+  \>>
+\>>
