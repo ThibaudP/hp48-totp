@@ -1,0 +1,26 @@
+@ base32 secret (any case; spaces, - and = ignored) -> string of key bytes
+\<< \-> s
+  \<< "" 0 0 \-> out acc bits
+    \<<
+      1 s SIZE FOR i
+        s i i SUB NUM
+        IF DUP 97 \>= OVER 122 \<= AND THEN 32 - END
+        \-> c
+        \<<
+          IF c 32 == c 45 == OR c 61 == OR NOT THEN
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567" c CHR POS
+            IF DUP NOT THEN "Bad base32 character" DOERR END
+            1 - acc 32 * + 'acc' STO
+            bits 5 + 'bits' STO
+            IF bits 8 \>= THEN
+              bits 8 - 'bits' STO
+              out acc 2 bits ^ / IP CHR + 'out' STO
+              acc 2 bits ^ MOD 'acc' STO
+            END
+          END
+        \>>
+      NEXT
+      out
+    \>>
+  \>>
+\>>

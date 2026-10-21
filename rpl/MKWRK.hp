@@ -1,0 +1,2 @@
+@ Creates WRK, the scratch string HOTP and SHAC work in, if it's missing.
+\<< IF 'WRK' VTYPE -1 == THEN "" 1 360 START "0" + NEXT 'WRK' STO END \>>

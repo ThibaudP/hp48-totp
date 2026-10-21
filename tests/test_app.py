@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(ROOT, "ref"))
 import hpgrob  # noqa: E402
 from hp48 import Emulator, x48  # noqa: E402
 from make_hp_payload import RFC_ACCOUNTS, accounts_source  # noqa: E402
-from totp_ref import totp  # noqa: E402
+from totp_ref import RFC_SECRET, midstates, totp  # noqa: E402
 
 hp = None
 TZ = time.localtime().tm_gmtoff // 3600
@@ -27,6 +27,7 @@ def setUpModule():
     hp.eval(f"TOTP {TZ} 'TZ' STO 0")  # enter the directory; later sends land in it
     hp.result()
     hp.send(os.path.join(ROOT, "asm", "hotp.bin"), "HOTP")
+    hp.send(os.path.join(ROOT, "asm", "shac.bin"), "SHAC")
     hp.send_text(accounts_source(RFC_ACCOUNTS), "ACCTS")
 
 
@@ -44,6 +45,21 @@ class Programs(unittest.TestCase):
         for i, (name, key) in enumerate(RFC_ACCOUNTS, 1):
             hp.eval(f"{i} 1 CODE")
             self.assertEqual(hp.result(), f'"{totp(key, 59)}"', name)
+
+    def test_base32_decode(self):
+        for b32 in ("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", "gezd gnbv gy3t qojq gezd gnbv gy3t qojq"):
+            hp.eval(f'"{b32}" B32D')
+            self.assertEqual(hp.result(), f'"{RFC_SECRET.decode()}"', b32)
+
+    def test_midstates_on_calculator(self):
+        t0 = time.time()
+        hp.eval('"GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ" B32D MIDS HEX')
+        print(f"\n  B32D + MIDS round trip: {time.time() - t0:.1f} s", file=sys.stderr)
+        words = [int(w, 16) for w in __import__("re").findall(r"#\s*([0-9A-F]+)h", hp.result())]
+        istate, ostate = midstates(RFC_SECRET)
+        self.assertEqual(words, list(istate + ostate))
+        hp.eval("DEC 0")
+        hp.result()
 
     def test_fmt6_pads_zeros(self):
         hp.eval("50471 FMT6")

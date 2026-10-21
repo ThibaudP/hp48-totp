@@ -1,0 +1,10 @@
+@ key bytes -> { istate0..4 ostate0..4 }, the HMAC-SHA1 midstates (as in ACCTS)
+\<< \-> k
+  \<<
+    IF k SIZE 64 > THEN "Secret too long" DOERR END
+    MKWRK
+    #67452301h #EFCDAB89h #98BADCFEh #10325476h #C3D2E1F0h 5 \->LIST k 54 PADB WRK SHAC
+    #67452301h #EFCDAB89h #98BADCFEh #10325476h #C3D2E1F0h 5 \->LIST k 92 PADB WRK SHAC
+    +
+  \>>
+\>>

@@ -1,0 +1,4 @@
+OPTION CODE
+OUTPUT shac.bin
+RELOCATE shac.o
+END

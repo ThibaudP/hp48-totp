@@ -1,0 +1,190 @@
+* shac.a -- one SHA-1 compression as an RPL Code object.
+* Lets the calculator compute HMAC midstates itself (adding an account on the 48).
+*
+*   3: { h0 h1 h2 h3 h4 }   5 user binary integers, updated in place
+*   2: block                string of at least 64 characters: 16 words, each
+*                           stored least significant nibble first (so the bytes
+*                           of each big-endian word are reversed)
+*   1: scratch              string of at least 355 characters
+*   -->
+*   1: { h0..h4 }           the same list, compressed
+*
+* Same conventions as hotp.a: pure machine code, RPL registers saved at the
+* start of the scratch string, SHA1C work area at +30.  The list is written in
+* place, so it must be a fresh object (e.g. straight from ->LIST).
+
+        NIBASC  \HPHP48-E\
+        CON(5)  #02DCC          Code prolog
+        REL(5)  SHACEND
+
+SHAC    SETHEX
+        P=      0
+        A=DAT1  A               level 1: scratch string
+        LC(5)   10
+        A=A+C   A               A = S
+        AD0EX
+        DAT0=A  A               saved I
+        D0=D0+  5
+        AD1EX
+        DAT0=A  A               saved stack pointer
+        D0=D0+  5
+        A=B     A
+        DAT0=A  A
+        D0=D0+  5
+        C=D     A
+        DAT0=C  A
+        D0=D0+  15              D0 = WORK = S+30
+
+        GOSUB   STACK
+        D1=D1+  5
+        C=DAT1  A               level 2: block string
+        R4=C
+
+* H = the list's 5 values (element stride 26: prolog, length, 16-nibble value).
+        GOSUB   STACK
+        D1=D1+  10
+        A=DAT1  A               level 3: the list
+        D1=A
+        D1=D1+  15              value of element 0
+        GOSUB   COPY5           D0 -> W0
+
+* W0..W15 = the block string's first 128 nibbles.
+        C=R4
+        D1=C
+        D1=D1+  10
+        A=DAT1  W
+        DAT0=A  W
+        D1=D1+  16
+        D0=D0+  16
+        A=DAT1  W
+        DAT0=A  W
+        D1=D1+  16
+        D0=D0+  16
+        A=DAT1  W
+        DAT0=A  W
+        D1=D1+  16
+        D0=D0+  16
+        A=DAT1  W
+        DAT0=A  W
+        D1=D1+  16
+        D0=D0+  16
+        A=DAT1  W
+        DAT0=A  W
+        D1=D1+  16
+        D0=D0+  16
+        A=DAT1  W
+        DAT0=A  W
+        D1=D1+  16
+        D0=D0+  16
+        A=DAT1  W
+        DAT0=A  W
+        D1=D1+  16
+        D0=D0+  16
+        A=DAT1  W
+        DAT0=A  W               D0 = W14 = WORK+152
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  8               D0 = WORK (152 = 9*16 + 8)
+        GOSUB   SHA1C           D0 left on H4
+        D0=D0-  16
+        D0=D0-  16              D0 = WORK
+
+* Write H back into the list.
+        GOSUB   STACK
+        D1=D1+  10
+        A=DAT1  A
+        D1=A
+        D1=D1+  15
+        C=DAT0  8
+        DAT1=C  8
+        D0=D0+  8
+        D1=D1+  16
+        D1=D1+  10
+        C=DAT0  8
+        DAT1=C  8
+        D0=D0+  8
+        D1=D1+  16
+        D1=D1+  10
+        C=DAT0  8
+        DAT1=C  8
+        D0=D0+  8
+        D1=D1+  16
+        D1=D1+  10
+        C=DAT0  8
+        DAT1=C  8
+        D0=D0+  8
+        D1=D1+  16
+        D1=D1+  10
+        C=DAT0  8
+        DAT1=C  8               D0 = WORK+32
+
+* Restore the RPL registers; levels 1 and 2 are dropped, the list stays.
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  16
+        D0=D0-  14              D0 = S (WORK+32-62)
+        A=DAT0  A
+        R2=A                    RPL I
+        D0=D0+  5
+        A=DAT0  A
+        D1=A
+        D1=D1+  10              two levels dropped
+        D0=D0+  5
+        A=DAT0  A
+        B=A     A
+        D0=D0+  5
+        C=DAT0  A
+        D=C     A
+        D=D+1   A
+        D=D+1   A
+        A=R2
+        D0=A
+        A=DAT0  A               continue with the next RPL object
+        D0=D0+  5
+        PC=(A)
+
+* D1 = saved stack pointer.  Needs D0 = WORK; keeps it.
+STACK   CD0EX
+        D0=C
+        D0=D0-  16
+        D0=D0-  9               S+5
+        A=DAT0  A
+        D1=A
+        D0=C
+        RTN
+
+* Copy 5 words: D1 -> list element values (stride 26), D0 -> words (stride 8).
+COPY5   C=DAT1  8
+        DAT0=C  8
+        D0=D0+  8
+        D1=D1+  16
+        D1=D1+  10
+        C=DAT1  8
+        DAT0=C  8
+        D0=D0+  8
+        D1=D1+  16
+        D1=D1+  10
+        C=DAT1  8
+        DAT0=C  8
+        D0=D0+  8
+        D1=D1+  16
+        D1=D1+  10
+        C=DAT1  8
+        DAT0=C  8
+        D0=D0+  8
+        D1=D1+  16
+        D1=D1+  10
+        C=DAT1  8
+        DAT0=C  8
+        D0=D0+  8
+        RTN
+
+        INCLUDE sha1.a
+SHACEND

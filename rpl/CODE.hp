@@ -1,10 +1,11 @@
 @ account index, TOTP counter -> 6-digit code string
-@ HOTP writes into its scratch string in place, so check WRK first: a missing
-@ or short WRK would let it write over whatever object is there instead.
+@ HOTP writes into its scratch string in place, so make sure WRK exists and is
+@ big enough first: otherwise it would write over whatever object is there.
 \<< \-> i c
   \<<
+    MKWRK
     ACCTS i GET 2 GET c R\->B WRK
-    IF DUP TYPE 2 \=/ THEN "WRK missing" DOERR END
+    IF DUP TYPE 2 \=/ THEN "WRK is not a string" DOERR END
     IF DUP SIZE 355 < THEN "WRK too short" DOERR END
     HOTP B\->R 1000000 MOD FMT6
   \>>

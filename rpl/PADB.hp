@@ -1,0 +1,17 @@
+@ key bytes, pad byte (54 = ipad, 92 = opad) -> 64-character block for SHAC:
+@ the key zero-padded to 64 bytes and XORed with the pad, with the bytes of each
+@ 4-byte word reversed (SHAC reads words least significant nibble first).
+\<< \-> k p
+  \<<
+    ""
+    0 15 FOR w
+      4 1 FOR j
+        w 4 * j + \-> n
+        \<<
+          IF n k SIZE \<= THEN k n n SUB NUM ELSE 0 END
+          R\->B p R\->B XOR B\->R CHR +
+        \>>
+      -1 STEP
+    NEXT
+  \>>
+\>>

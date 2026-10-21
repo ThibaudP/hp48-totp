@@ -5,7 +5,7 @@
 @ never points at a stale object.  The screen is rebuilt only when the code, the account or
 @ TZ changes; each second only TICK redraws the countdown.
 \<<
-  IF 'WRK' VTYPE -1 == THEN "" 1 360 START "0" + NEXT 'WRK' STO END
+  MKWRK
   { OTP } ORDER
   #131d #64d BLANK PICT STO { #0d #0d } PVIEW
   1 -1 -1 LBLS 0 \-> i lc lu lbls done
