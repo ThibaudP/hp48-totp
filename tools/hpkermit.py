@@ -4,12 +4,14 @@
 Usage:
   hpkermit.py PORT send FILE [NAME]   send FILE, stored on the calculator as NAME
   hpkermit.py PORT get NAME [FILE]    fetch variable NAME into FILE (default NAME)
+  hpkermit.py PORT host COMMAND       evaluate COMMAND on the calculator (REMOTE HOST)
   hpkermit.py PORT finish             leave server mode
 
 Plain Kermit with type-1 checksums, no sliding windows or long packets; the channel
 is assumed 8-bit clean, so bytes with the high bit set are sent as is.
 """
 import os
+import re
 import select
 import sys
 import termios
@@ -168,7 +170,18 @@ class Kermit:
 
     def get(self, name):
         # R (receive-init) asks the server to start sending NAME.
-        request = make_packet(0, "R", name.encode("latin-1"))
+        return self.receive(make_packet(0, "R", name.encode("latin-1")), name)
+
+    def host(self, command):
+        """REMOTE HOST: the server evaluates `command` as a command line and sends
+        back the result (level 1, as transfer text) like a file."""
+        from hp2emu import TRIGRAPHS
+        text = re.sub(r"\\(\d{3}|..)", lambda m: chr(int(m.group(1))) if m.group(1).isdigit()
+                      else chr(TRIGRAPHS.get(m.group(1), ord("?"))), command)
+        return self.receive(make_packet(0, "C", encode(text.encode("latin-1"))), command)
+
+    def receive(self, request, name):
+        """Send a request packet, then receive the transfer the server answers with."""
         self.port.write(request)
         data, expect, started, requests = bytearray(), 0, False, 1
         # The deadline only covers silence: big objects take a while to decompile and send.
@@ -222,6 +235,8 @@ def main(argv):
         data = k.get(argv[3])
         with open(argv[4] if len(argv) == 5 else argv[3], "wb") as f:
             f.write(data)
+    elif cmd == "host" and len(argv) == 4:
+        sys.stdout.write(k.host(argv[3]).decode("latin-1"))
     elif cmd == "finish":
         k.finish()
     else:
