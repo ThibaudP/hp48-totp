@@ -21,6 +21,7 @@ clock, with no network. It's an air-gapped backup in case the phone is lost.
   base32 secret, then computes everything on the 48. No PC needed after install.
 - **Auto power-off:** after 3 minutes without a key press the calculator turns
   off; ON brings the app back.
+- **Countdown:** refreshed every 2 s, to keep memory use low (see below).
 
 How it works in depth (algorithm, Saturn code, object layouts, cable, pitfalls):
 [DESIGN.md](DESIGN.md).
@@ -48,8 +49,11 @@ How it works in depth (algorithm, Saturn code, object layouts, cable, pitfalls):
   - The clock is turned into Unix time with `TZ` as the UTC offset.
   - The screen is drawn into PICT and shown full screen with `PVIEW`, so the
     bottom row can hold the app's own key labels.
-  - Codes are recomputed only on a new 30 s window or a change of account or
-    `TZ`; each second, only the countdown is redrawn, in a single `REPL`.
+  - Built for a 48G's 32 KB: the loop allocates so little that garbage
+    collection, which freezes the 48 for seconds, rarely kicks in. The clock
+    is read once per window, the countdown refreshes every 2 s, the next
+    window's codes are computed ahead, and screens are drawn straight into
+    PICT. Details in [DESIGN.md](DESIGN.md#garbage-collection).
 
 ## Install
 
@@ -60,7 +64,7 @@ calculator: wire mode (`-33 CF`) and `IOPAR` set to `{ 9600 0 0 0 3 1 }`.
 **Back up your calculator first.** This is machine code, and a bug can clear
 the memory.
 
-The whole app is one file, [`dist/TOTP`](dist/TOTP), about 10 KB:
+The whole app is one file, [`dist/TOTP`](dist/TOTP), about 12 KB:
 
 1. On the 48, in `HOME`, start the Kermit server (`SERVER`).
 2. Send `dist/TOTP` with any Kermit program, in binary mode. With the one in
@@ -103,11 +107,12 @@ Check a code against your phone before relying on it.
 
 | Part | Size |
 |---|---|
-| The app | about 10 KB |
+| The app | about 12 KB |
 | Each account | about 200 B |
 | At run time | about 2–3 KB more (scratch string, screen, temporaries) |
 
-With a handful of accounts, keep about 14 KB free.
+With a handful of accounts, keep about 15 KB free; more free memory means fewer
+pauses for garbage collection.
 
 ## Security
 

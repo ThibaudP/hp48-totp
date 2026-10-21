@@ -198,8 +198,8 @@ and `HOTP` would write over whatever object that is.
 | Variable | Role |
 |---|---|
 | `OTP` | The app: the main loop, `KEY` polling, `PVIEW`, the three modes (home, account, move), auto power-off. It moves itself to the first soft key. Its locals have one-letter names, listed at the top of the source, because User RPL stores a local's name at every use. |
-| `HSCR`, `HTICK` | home view: the static screen (rows, labels), then the header with seconds and the countdown |
-| `DSCR`, `DTICK` | account view: the static screen (name, previous / current / next code, labels), then the countdown |
+| `HDRAW`, `HCODES`, `HTICK`, `INVR` | home view: full draw into PICT; codes only (new window); seconds and bar; invert a row (selection) |
+| `DDRAW`, `DCODES`, `DTICK` | account view: full draw into PICT; previous / current / next code only; seconds and bar |
 | `LBLS`, `CTXT`, `TZL`, `FMT6`, `FMT7` | key labels, centered text, time zone label, code formatting |
 | `CODE` | account index, counter → 6-digit string (calls `HOTP`) |
 | `UNIX` | clock → Unix time |
@@ -214,14 +214,17 @@ and `HOTP` would write over whatever object that is.
 - **Drawing in PICT.** `→LCD` only covers the 56 stack lines, so the soft key row
   would stay the system menu. The app draws in PICT and shows it with
   `{ #0 #0 } PVIEW`, which covers all 64 lines, including its own key labels.
-- **PICT is only changed in place** (`PICT … REPL`), never re-stored while it's
-  on screen. Re-storing it caused a second of garbage at each new code.
-- **The countdown is drawn in one `REPL`:** it's composed off screen, so the bar
-  never flickers.
-- **Recompute (`r`) and redraw (`q`) are separate.** Codes are recomputed on a
-  new 30 s window, an account change or TZ. The static screen is redrawn whenever
-  something shown changes, such as the selection or the order. Each second, only
-  the countdown is.
+- **PICT is only changed in place**, never re-stored while it's on screen.
+  Re-storing it caused a second of garbage at each new code. A full redraw is
+  `ERASE` followed by `REPL`s straight into PICT, with no full-screen GROB built.
+- **Three levels of redraw:**
+  - full screen (`HDRAW`, `DDRAW`): on an account change, a mode change, TZ, or
+    an edit;
+  - codes only (`HCODES`, `DCODES`): on a new 30 s window;
+  - countdown only (`HTICK`, `DTICK`): every 2 s. It erases just the slices of
+    the bar that passed and rewrites the 3-character seconds.
+- **Selection moves in place.** In the home view, ▲▼ invert the two rows
+  concerned (`INVR`); the list is redrawn only when it scrolls, one page at a time.
 - **Input screens.** ADD and REN use `INPUT` rather than `INFORM`: INPUT returns
   the typed text as is, while INFORM would parse a base32 secret as an object.
   DEL confirms with `CHOOSE`, and TIME is an `INFORM` with numeric fields.
@@ -229,11 +232,34 @@ and `HOTP` would write over whatever object that is.
   calculator off from inside the program. ON resumes the app, which then redraws
   everything.
 
+### Garbage collection
+
+A 48G with the app and a few accounts has about 12 KB free. The 48 collects
+garbage when temporary memory runs out, and a collection inside the app takes
+one to several seconds. The first versions allocated so much that this happened
+every few seconds, which showed up as freezes of 2–5 s. The loop is now built
+to allocate less in a 30 s window than there is free memory:
+
+- **Clock:** read once per window (`UNIX`, plus `TIME`'s hundredths). In
+  between, the current second is derived from `TICKS`.
+- **Waiting:** polls the keyboard every 0.25 s until a key or the next refresh.
+- **Countdown:** refreshed every 2 s, not every second.
+- **Codes:** the next window's codes are computed ahead, one per countdown
+  refresh. A new window then only redraws.
+- **No forced collection.** Calling `MEM` to collect at a chosen moment took
+  3.3 s inside the app, worse than letting the 48 collect when it must.
+
+On the emulator with 13 KB free, freezes longer than 1.5 s in 70 s went from 19
+(up to 5.6 s) to a few short hiccups. To reproduce that, leave the app the same
+free memory as a 48G: emulators are usually 48GX with 128 KB, where none of this
+shows.
+
 ### Layouts (131×64)
 
 | Rows (y) | Home view | Account view |
 |---|---|---|
 | 0–7 | `TOTP` · seconds, time zone | name · `3/9 CEST` |
+| 0–7, x=80 | seconds (every 2 s) | |
 | 9–10 | countdown (2 px) | |
 | 9–16 | | `prev  110 349` |
 | 12–51 | 5 rows: name · code, the selected one inverted | |
@@ -246,24 +272,26 @@ and `HOTP` would write over whatever object that is.
 
 | Step | Time |
 |---|---|
-| One code (HOTP) | 0.05 s |
-| Home view, all codes, on a new window | about 0.1 s per account, plus drawing |
-| Account view, three codes and large digits | about 1 s |
-| Countdown, each second | about 0.06 s |
+| One code (HOTP) | 0.05 s (`CODE`, with its RPL around it: 0.1 s) |
+| ▲▼ in the home view | about 0.35 s |
+| Opening an account, PREV / NEXT | about 0.9 s |
+| New 30 s window | codes already computed: only the redraw (about 0.6 s home) |
+| Countdown, every 2 s | about 0.1 s |
 | Adding an account (midstates) | a few seconds |
 
 ### RAM
 
 | Part | Size |
 |---|---|
-| `dist/TOTP` (programs, font, HOTP, SHAC) | about 10 KB; `OTP` alone is 3 KB |
+| `dist/TOTP` (programs, font, HOTP, SHAC) | about 12 KB; `OTP` alone is about 3.5 KB |
 | Each account | about 200 B |
 | WRK and PICT | about 1.4 KB, created at run time |
-| Temporaries while running | about 1–2 KB |
+| Temporaries while running | a few KB, collected now and then |
 
 Numbers cost a lot in User RPL: every real other than the few built into the ROM
 takes 10.5 bytes, and every binary integer (`#131d`) 13. Coordinates and key
-codes are most of the size. A System RPL rewrite could roughly halve it.
+codes are most of the size. A System RPL rewrite could roughly halve it, and
+would also allocate less.
 
 ### Names
 
