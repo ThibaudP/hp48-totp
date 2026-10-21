@@ -51,8 +51,8 @@ make e2e           # end-to-end on a headless emulated 48GX (needs tmux, ~3.5 mi
 make asm app       # build HOTP and the app directory for the calculator
 ```
 
-`make toolchain` needs a C compiler, autoconf, automake, curl, unzip and git, plus
-x48ng's build dependencies:
+`make toolchain` needs a C compiler, autoconf, automake, curl, unzip, git and
+pkg-config, plus x48ng's build dependencies (`make check` only needs the Lua headers):
 
 - **Fedora:** `sudo dnf install lua-devel readline-devel ncurses-devel gtk4-devel tmux`
 - **Debian/Ubuntu:** `sudo apt install liblua5.4-dev libreadline-dev libncurses-dev libgtk-4-dev tmux`

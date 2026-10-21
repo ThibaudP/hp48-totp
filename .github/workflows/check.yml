@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install -y autoconf automake unzip
+        run: sudo apt-get update && sudo apt-get install -y autoconf automake unzip pkg-config liblua5.4-dev
       - name: Cache toolchain
         uses: actions/cache@v4
         with:

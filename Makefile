@@ -4,6 +4,8 @@ export HP48_EMU_HOME ?= $(HOME)/.local/share/hp48-emu
 HPTOOLS ?= $(HP48_EMU_HOME)/hptools/bin
 X48NG_SRC ?= $(HP48_EMU_HOME)/src/x48ng/src
 SATRUN = tools/satrun/satrun
+# x48ng's headers include Lua's (Fedora: lua-devel, Debian/Ubuntu: liblua5.4-dev)
+LUA_CFLAGS ?= $(shell pkg-config --cflags lua5.4 2>/dev/null || pkg-config --cflags lua 2>/dev/null)
 
 .PHONY: help toolchain check test vectors trace payload-rfc app emu emu-rpl asm satrun asm-test e2e clean
 
@@ -55,7 +57,7 @@ asm/%.bin: asm/%.a asm/%.m
 satrun: $(SATRUN)
 
 $(SATRUN): tools/satrun/satrun.c $(X48NG_SRC)/core/emulate.c $(X48NG_SRC)/core/registers.c
-	$(CC) -O2 -w -I$(X48NG_SRC) -o $@ $^
+	$(CC) -O2 -w -I$(X48NG_SRC) $(LUA_CFLAGS) -o $@ $^
 
 asm-test: asm $(SATRUN)
 	cd asm && $(PY) -m unittest discover -v -p 'test_*.py'
