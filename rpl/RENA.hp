@@ -1,0 +1,11 @@
+@ REN: account index -> renames it (cancel with ON)
+\<< \-> i
+  \<<
+    IFERR
+      "New name:" { ACCTS i GET 1 GET \Ga } INPUT
+      IF DUP SIZE THEN
+        ACCTS i ACCTS i GET 1 4 ROLL 1 12 SUB PUT PUT 'ACCTS' STO
+      ELSE DROP END
+    THEN END
+  \>>
+\>>

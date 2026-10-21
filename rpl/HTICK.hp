@@ -1,0 +1,11 @@
+@ seconds left, header text -> header line and countdown drawn into PICT (one REPL)
+\<< \-> left txt
+  \<<
+    PICT { #0d #0d }
+    #131d #11d BLANK
+    { #0d #0d } "TOTP" 2 \->GROB REPL
+    left \->STR "s " + txt + 2 \->GROB DUP SIZE DROP #131d SWAP - #0d 2 \->LIST SWAP REPL
+    IF left 0 > THEN { #0d #9d } left 131 * 30 / IP R\->B #2d BLANK NEG REPL END
+    REPL
+  \>>
+\>>

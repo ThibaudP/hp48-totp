@@ -1,0 +1,10 @@
+@ seconds left -> countdown bar and seconds drawn into PICT at y=48 (one REPL)
+\<< \-> left
+  \<<
+    PICT { #0d #48d }
+    #131d #8d BLANK
+    IF left 0 > THEN { #2d #2d } left 3 * R\->B #4d BLANK NEG REPL END
+    left \->STR "s" + 2 \->GROB DUP SIZE DROP #131d SWAP - #0d 2 \->LIST SWAP REPL
+    REPL
+  \>>
+\>>

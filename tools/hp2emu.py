@@ -12,7 +12,7 @@ import sys
 # HP 48 character codes for the trigraphs we use; extend as needed.
 TRIGRAPHS = {
     "<<": 171, ">>": 187, "->": 141,
-    "<=": 137, ">=": 138, "=/": 139, "oo": 140, "pi": 135, "GS": 133,
+    "<=": 137, ">=": 138, "=/": 139, "Ga": 140, "pi": 135, "GS": 133, "oo": 159,
 }
 
 

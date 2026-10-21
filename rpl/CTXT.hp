@@ -1,0 +1,4 @@
+@ GROB, text, y -> GROB with text (medium font) centered on row y
+\<< \-> g t y
+  \<< g t 2 \->GROB DUP SIZE DROP B\->R 131 SWAP - 2 / IP R\->B y R\->B 2 \->LIST SWAP REPL \>>
+\>>

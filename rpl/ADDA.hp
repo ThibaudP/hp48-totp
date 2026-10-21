@@ -1,0 +1,21 @@
+@ ADD: asks for a name and a base32 secret, computes the midstates on the
+@ calculator and appends the account to ACCTS.  -> 1 if added, else 0.
+@ INPUT returns the raw text (INFORM would parse it as an object).
+\<<
+  IFERR
+    "Account name:" { "" \Ga } INPUT
+    "Base32 secret:" { "" \Ga } INPUT
+    \-> n s
+    \<<
+      IF n SIZE NOT THEN "Empty name" DOERR END
+      CLLCD "Computing..." 4 DISP
+      n 1 12 SUB s B32D MIDS 2 \->LIST 1 \->LIST
+      IF 'ACCTS' VTYPE -1 == THEN { } 'ACCTS' STO END
+      ACCTS SWAP + 'ACCTS' STO
+      1
+    \>>
+  THEN
+    IF ERRM SIZE THEN ERRM MSGBOX END
+    0
+  END
+\>>

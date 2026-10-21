@@ -1,0 +1,16 @@
+@ TIME: set the calculator's date, time and UTC offset (TZ) in one form
+\<<
+  IFERR
+    "Clock"
+    { { "Date:" "As in MODES: M.DDYYYY or D.MMYYYY" 0 }
+      { "Time:" "HH.MMSS, 24 h" 0 }
+      { "UTC offset:" "Hours: 1 = CET, 2 = CEST" 0 } }
+    { 1 0 } { } DATE TIME 2 RND TZ 3 \->LIST
+    INFORM
+    IF THEN
+      LIST\-> DROP 'TZ' STO \->TIME \->DATE
+    END
+  THEN
+    IF ERRM SIZE THEN ERRM MSGBOX END
+  END
+\>>

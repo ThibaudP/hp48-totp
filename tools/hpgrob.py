@@ -22,8 +22,8 @@ DIGITS_5X7 = {
 SCALE = 3
 DIGIT_W, DIGIT_H = 5 * SCALE, 7 * SCALE
 
-# Where SCRN puts the six digits (must match rpl/SCRN.hp).
-CODE_X, CODE_Y, CODE_STEP, CODE_GAP = 11, 14, 17, 6
+# Where DSCR puts the six big digits (must match rpl/DSCR.hp).
+CODE_X, CODE_Y, CODE_STEP, CODE_GAP = 11, 18, 17, 6
 
 
 def digit_bitmap(d):
@@ -76,8 +76,9 @@ QUADRANTS = {
 
 def from_tui(screen):
     """LCD bitmap (131x64) from tools/x48.sh screen output."""
-    # tmux compresses runs of spaces into tabs (stops every 8 columns).
-    lines = [l.expandtabs(8) for l in screen.splitlines() if l.startswith("│")][:32]
+    # The frame's side is "│", or "x" when the terminal draws it with the VT100
+    # line-drawing set.  Tabs only appear if the terminal type allows hardware tabs.
+    lines = [l.expandtabs(8) for l in screen.splitlines() if l[:1] in "│x" and len(l) >= 67][:32]
     rows = [[0] * 132 for _ in range(64)]
     for cy, line in enumerate(lines):
         for cx, ch in enumerate(line[1:67]):
@@ -92,7 +93,7 @@ def crop(bitmap, x, y, w, h):
 
 
 def read_code(bitmap):
-    """The 6-digit code drawn by SCRN, or None if a digit doesn't match the font."""
+    """The 6-digit code drawn by DSCR, or None if a digit doesn't match the font."""
     out = ""
     for k in range(6):
         cell = crop(bitmap, code_x(k), CODE_Y, DIGIT_W, DIGIT_H)
@@ -101,6 +102,33 @@ def read_code(bitmap):
             return None
         out += match[0]
     return out
+
+
+# Home view rows (rpl/HSCR.hp): 5 rows of 8 px from y=12, code "287 082" at x=87
+# in the medium font (6 px per character).
+HOME_Y, HOME_ROWS, HOME_CODE_X = 12, 5, 87
+
+
+def glyphs(strip, chars="0123456789"):
+    """Per-character bitmaps from a GROB of `chars` rendered with 2 ->GROB (6x8 each)."""
+    return {c: crop(strip, 6 * i, 0, 6, 8) for i, c in enumerate(chars)}
+
+
+def read_home(bitmap, digits):
+    """[(code, selected)] for the home view's visible rows, code None if unreadable."""
+    rows = []
+    for k in range(HOME_ROWS):
+        y = HOME_Y + 8 * k
+        selected = bitmap[y][0] == 1  # the selected row is drawn inverted
+        code = ""
+        for i in (0, 1, 2, 4, 5, 6):
+            cell = crop(bitmap, HOME_CODE_X + 6 * i, y, 6, 8)
+            if selected:
+                cell = [[1 - p for p in row] for row in cell]
+            match = [d for d, g in digits.items() if g == cell]
+            code += match[0] if match else "?"
+        rows.append((None if "?" in code else code, selected))
+    return rows
 
 
 def ascii_art(bitmap):

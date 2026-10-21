@@ -1,7 +1,6 @@
-@ -> 131x8 GROB with the app's soft key labels (built once per run)
-\<< #131d #8d BLANK
-  { "PREV" "NEXT" "" "TZ" "" "QUIT" } \-> labels
-  \<<
+@ { 6 labels } -> 131x8 GROB of soft key labels ("" leaves a key blank)
+\<< \-> labels
+  \<< #131d #8d BLANK
     1 6 FOR j
       labels j GET
       IF DUP SIZE THEN

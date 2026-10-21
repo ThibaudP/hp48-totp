@@ -25,7 +25,15 @@ case "${1:-}" in
 start)
     tmux kill-session -t $S 2>/dev/null || true
     rm -f "$DATA/state" "$DATA/ram"
-    cmd="$BIN --datadir=$DATA --tui-small --reset --serial=pty --throttle"
+    # A terminal type without hardware tabs: ncurses would otherwise move the
+    # cursor with tabs, and tmux captures those as a tab, losing the skipped cells.
+    TI="$EMU_HOME/terminfo"
+    if [ ! -d "$TI" ]; then
+        mkdir -p "$TI"
+        infocmp tmux-256color | sed 's/tmux-256color|/hp48-notab|/; s/\bht=^I, //; s/\bit#8, //; s/\bcbt=\\E\[Z, //; s/\bhts=\\EH, //' > "$TI/notab.src"
+        tic -x -o "$TI" "$TI/notab.src"
+    fi
+    cmd="env TERMINFO=$TI TERM=hp48-notab $BIN --datadir=$DATA --tui-small --reset --serial=pty --throttle"
     # --serial (not -t, which enables IR and crashes) opens the wire port as a pty.
     if [ "${2:-}" = gdb ]; then
         cmd="gdb -q -iex 'set debuginfod enabled off' -x $DATA/gdb.cmd --args $cmd"

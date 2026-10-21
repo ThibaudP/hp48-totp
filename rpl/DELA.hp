@@ -1,0 +1,12 @@
+@ DEL: account index -> 1 if deleted after confirmation, else 0
+\<< \-> i
+  \<<
+    "Delete " ACCTS i GET 1 GET + "?" + { { "No" 0 } { "Yes" 1 } } 1 CHOOSE
+    IF THEN
+      IF THEN
+        ACCTS \-> l \<< l 1 i 1 - SUB l i 1 + l SIZE SUB + 'ACCTS' STO \>>
+        1
+      ELSE 0 END
+    ELSE 0 END
+  \>>
+\>>

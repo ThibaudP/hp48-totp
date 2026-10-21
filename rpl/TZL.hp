@@ -1,0 +1,8 @@
+@ -> time zone label for the header: CEST / CET / UTC / UTC+n
+\<< CASE
+    TZ 2 == THEN "CEST" END
+    TZ 1 == THEN "CET" END
+    TZ 0 == THEN "UTC" END
+    "UTC" TZ 0 > "+" "" IFTE + TZ \->STR +
+  END
+\>>

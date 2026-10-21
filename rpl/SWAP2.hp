@@ -1,0 +1,2 @@
+@ list, i, j -> list with elements i and j swapped
+\<< \-> l i j \<< l i l j GET PUT j l i GET PUT \>> \>>
