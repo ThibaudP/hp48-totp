@@ -9,6 +9,11 @@
 @ static screen is redrawn (rd) when anything shown changes; each second only
 @ the countdown is.  After 3 minutes without a key the calculator turns off;
 @ ON resumes the app.
+@ Locals (one letter: User RPL stores a local's name at every use):
+@   a b  home / account key labels     m mode       s selected account
+@   t    first visible row             l last counter (window)   w last second
+@   z    TICKS at the last key         v codes shown r recompute  q redraw
+@   e    done
 \<<
   MKWRK { OTP } ORDER
   IF 'ACCTS' VTYPE -1 == THEN { } 'ACCTS' STO END
@@ -16,94 +21,94 @@
   { "BACK" "PREV" "NEXT" "TZ" "" "QUIT" } LBLS
   #131d #64d BLANK PICT STO { #0d #0d } PVIEW
   0 1 1 -1 -1 TICKS { } 1 1 0
-  \-> hl dl mode sel top lc lu lk cs rc rd done
+  \-> a b m s t l w z v r q e
   \<<
     DO
       ACCTS SIZE \-> n
       \<<
-        IF sel n > THEN n 1 MAX 'sel' STO END
-        IF n 0 == mode 1 == AND THEN 0 'mode' STO 1 'rd' STO END
+        IF s n > THEN n 1 MAX 's' STO END
+        IF n 0 == m 1 == AND THEN 0 'm' STO 1 'q' STO END
         UNIX \-> u
         \<<
           u 30 / IP \-> c
           \<<
-            IF c lc \=/ THEN c 'lc' STO 1 'rc' STO END
-            IF rc THEN
-              IF mode 1 == THEN
-                sel c 1 - CODE sel c CODE sel c 1 + CODE 3 \->LIST
+            IF c l \=/ THEN c 'l' STO 1 'r' STO END
+            IF r THEN
+              IF m 1 == THEN
+                s c 1 - CODE s c CODE s c 1 + CODE 3 \->LIST
               ELSE
                 IF n THEN 1 n FOR k k c CODE NEXT n \->LIST ELSE { } END
               END
-              'cs' STO 0 'rc' STO 1 'rd' STO
+              'v' STO 0 'r' STO 1 'q' STO
             END
-            IF rd THEN
+            IF q THEN
               PICT { #0d #0d }
-              IF mode 1 == THEN
-                ACCTS sel GET 1 GET
-                sel \->STR "/" + n \->STR + " " + TZL +
-                cs LIST\-> DROP dl DSCR
+              IF m 1 == THEN
+                ACCTS s GET 1 GET
+                s \->STR "/" + n \->STR + " " + TZL +
+                v LIST\-> DROP b DSCR
               ELSE
-                cs sel top hl HSCR
+                v s t a HSCR
               END
               REPL
-              0 'rd' STO -1 'lu' STO
+              0 'q' STO -1 'w' STO
             END
-            IF u lu \=/ THEN
-              u 'lu' STO
+            IF u w \=/ THEN
+              u 'w' STO
               30 u 30 MOD -
-              IF mode 1 == THEN DTICK ELSE mode 2 == "MOVE" TZL IFTE HTICK END
+              IF m 1 == THEN DTICK ELSE m 2 == "MOVE" TZL IFTE HTICK END
             END
           \>>
         \>>
         IF KEY THEN
-          TICKS 'lk' STO
+          TICKS 'z' STO
           \-> k
           \<<
             CASE
-              mode 1 == THEN
+              m 1 == THEN
                 CASE
-                  k 11 == k 34 == OR THEN 0 'mode' STO 1 'rc' STO END
-                  k 12 == k 25 == OR THEN sel 2 - n MOD 1 + 'sel' STO 1 'rc' STO END
-                  k 13 == k 35 == OR THEN sel n MOD 1 + 'sel' STO 1 'rc' STO END
-                  k 14 == THEN 3 TZ - 'TZ' STO 1 'rc' STO END
-                  k 16 == THEN 1 'done' STO END
+                  k 11 == k 34 == OR THEN 0 'm' STO 1 'r' STO END
+                  k 12 == k 25 == OR THEN s 2 - n MOD 1 + 's' STO 1 'r' STO END
+                  k 13 == k 35 == OR THEN s n MOD 1 + 's' STO 1 'r' STO END
+                  k 14 == THEN 3 TZ - 'TZ' STO 1 'r' STO END
+                  k 16 == THEN 1 'e' STO END
                 END
               END
-              mode 2 == THEN
+              m 2 == THEN
                 CASE
-                  k 25 == sel 1 > AND THEN
-                    ACCTS sel sel 1 - SWAP2 'ACCTS' STO cs sel sel 1 - SWAP2 'cs' STO
-                    sel 1 - 'sel' STO 1 'rd' STO
+                  k 25 == s 1 > AND THEN
+                    ACCTS s s 1 - SWAP2 'ACCTS' STO v s s 1 - SWAP2 'v' STO
+                    s 1 - 's' STO 1 'q' STO
                   END
-                  k 35 == sel n < AND THEN
-                    ACCTS sel sel 1 + SWAP2 'ACCTS' STO cs sel sel 1 + SWAP2 'cs' STO
-                    sel 1 + 'sel' STO 1 'rd' STO
+                  k 35 == s n < AND THEN
+                    ACCTS s s 1 + SWAP2 'ACCTS' STO v s s 1 + SWAP2 'v' STO
+                    s 1 + 's' STO 1 'q' STO
                   END
-                  k 51 == k 14 == OR THEN 0 'mode' STO -1 'lu' STO END
+                  k 51 == k 14 == OR THEN 0 'm' STO -1 'w' STO END
                 END
               END
               CASE
-                k 25 == sel 1 > AND THEN sel 1 - 'sel' STO 1 'rd' STO END
-                k 35 == sel n < AND THEN sel 1 + 'sel' STO 1 'rd' STO END
-                k 51 == k 36 == OR n AND THEN 1 'mode' STO 1 'rc' STO END
-                k 11 == THEN IF ADDA THEN ACCTS SIZE 'sel' STO 1 'mode' STO END 1 'rc' STO END
-                k 12 == n AND THEN sel RENA 1 'rd' STO END
-                k 13 == n AND THEN sel DELA DROP 1 'rc' STO END
-                k 14 == n 1 > AND THEN 2 'mode' STO -1 'lu' STO END
-                k 15 == THEN TIMEA 1 'rc' STO END
-                k 16 == THEN 1 'done' STO END
+                k 25 == s 1 > AND THEN s 1 - 's' STO 1 'q' STO END
+                k 35 == s n < AND THEN s 1 + 's' STO 1 'q' STO END
+                k 51 == k 36 == OR n AND THEN 1 'm' STO 1 'r' STO END
+                k 11 == THEN IF ADDA THEN ACCTS SIZE 's' STO 1 'm' STO END 1 'r' STO END
+                k 12 == n AND THEN s RENA 1 'q' STO END
+                k 13 == n AND THEN s DELA DROP 1 'r' STO END
+                k 14 == n 1 > AND THEN 2 'm' STO -1 'w' STO END
+                k 15 == THEN TIMEA 1 'r' STO END
+                k 16 == THEN 1 'e' STO END
               END
             END
-            IF sel top < THEN sel 'top' STO 1 'rd' STO END
-            IF sel top 4 + > THEN sel 4 - 'top' STO 1 'rd' STO END
-            IF rd rc OR THEN { #0d #0d } PVIEW END
+            IF s t < THEN s 't' STO 1 'q' STO END
+            IF s t 4 + > THEN s 4 - 't' STO 1 'q' STO END
+            IF q r OR THEN { #0d #0d } PVIEW END
           \>>
         ELSE
-          IF TICKS lk - B\->R 8192 / 180 > THEN
-            OFF TICKS 'lk' STO 1 'rc' STO { #0d #0d } PVIEW
+          IF TICKS z - B\->R 8192 / 180 > THEN
+            OFF TICKS 'z' STO 1 'r' STO { #0d #0d } PVIEW
           ELSE .1 WAIT END
         END
       \>>
-    UNTIL done END
+    UNTIL e END
   \>>
 \>>

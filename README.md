@@ -5,23 +5,33 @@ It shows the same 6-digit TOTP codes (RFC 6238, HMAC-SHA1, 30 s) as
 Google Authenticator, Ente Auth or Authy, computed from the calculator's own
 clock, with no network. It's an air-gapped backup in case the phone is lost.
 
-![The app on an emulated 48GX (RFC test account)](docs/screen.png)
+| Home: every account and its current code | One account: previous, current, next |
+|---|---|
+| ![Home view](docs/home.png) | ![Account view](docs/detail.png) |
 
-One screen per account: the name, the account number and time zone, the code in
-large digits, and a countdown bar with the seconds left. The soft keys are
-**PREV** / **NEXT** (◀ ▶ also work), **TZ** (CET ↔ CEST) and **QUIT** (ON also
-quits).
+*(Screenshots from an emulated 48GX with test accounts.)*
 
-How it works in depth (algorithm, Saturn code, object layouts, cable, pitfalls): [DESIGN.md](DESIGN.md).
+- **Home view:** every account with its current code and a shared countdown.
+  ▲▼ select, ENTER (or ▶) opens an account. Soft keys **ADD**, **REN**, **DEL**,
+  **MOVE**, **TIME**, **QUIT**.
+- **Account view:** the current code in large digits, with the previous and next
+  ones, in case the clock has drifted. **BACK** (or ◀), **PREV** / **NEXT**
+  (or ▲▼), **TZ** (CET ↔ CEST), **QUIT**.
+- **Accounts are added on the calculator itself:** ADD asks for a name and the
+  base32 secret, then computes everything on the 48. No PC needed after install.
+- **Auto power-off:** after 3 minutes without a key press the calculator turns
+  off; ON brings the app back.
+
+How it works in depth (algorithm, Saturn code, object layouts, cable, pitfalls):
+[DESIGN.md](DESIGN.md).
 
 ## How it works
 
-- **The secret never reaches the calculator.** HMAC-SHA1 hashes the key padded
-  to one 64-byte block, XORed with ipad or opad, and that first compression
-  never changes. `ref/make_hp_payload.py` computes those two SHA-1 states once
-  on the PC (the *midstates*) and only they are sent. They are as sensitive as
-  the secret itself, but the calculator then needs **2 compressions per code**
-  instead of 4.
+- **HMAC midstates.** HMAC-SHA1 hashes the key, padded to one 64-byte block and
+  XORed with ipad or opad, and that first compression never changes. It's done
+  once, when the account is added; only those two SHA-1 states (the
+  *midstates*) are stored. Each code then needs **2 compressions** instead of 4.
+  The midstates are as sensitive as the secret itself.
 - **SHA-1 in Saturn assembly** (`asm/sha1.a`):
   - XOR is built from AND, OR and NOT, which the Saturn lacks as one instruction.
   - Rotations combine nibble shifts and bit shifts.
@@ -29,116 +39,98 @@ How it works in depth (algorithm, Saturn code, object layouts, cable, pitfalls):
   - Words are stored least significant nibble first, the Saturn's own order, so
     loads and stores never swap bytes.
   - One compression is about 8,800 instructions.
-- **HOTP as a Code object** (`asm/hotp.a`): it builds both HMAC blocks, runs the
-  two compressions and does the dynamic truncation. It is pure machine code with
-  no ROM calls: it saves the RPL registers in its scratch string and only writes
-  into objects it was given. One code takes about 0.05 s at 48G speed.
+- **Two Code objects**, pure machine code with no ROM calls:
+  - `HOTP` (`asm/hotp.a`): both HMAC blocks, the two compressions and the
+    dynamic truncation. About 0.05 s per code at 48G speed.
+  - `SHAC` (`asm/shac.a`): one compression on a state list, used to compute the
+    midstates when you add an account.
 - **The app in User RPL** (`rpl/`):
   - The clock is turned into Unix time with `TZ` as the UTC offset.
   - The screen is drawn into PICT and shown full screen with `PVIEW`, so the
     bottom row can hold the app's own key labels.
-  - The full screen (about 1 s) is redrawn only when the code, the account or
-    `TZ` changes.
-  - Each second, only the countdown is redrawn, in a single `REPL` (about 0.06 s).
+  - Codes are recomputed only on a new 30 s window or a change of account or
+    `TZ`; each second, only the countdown is redrawn, in a single `REPL`.
 
-## Getting started
+## Install
 
-```sh
-git clone https://github.com/ThibaudP/hp48-totp && cd hp48-totp
-make toolchain     # HP Tools, x48ng and the 48GX ROM, into ~/.local/share/hp48-emu
-make check         # Python reference + Saturn asm tests (seconds)
-make e2e           # end-to-end on a headless emulated 48GX (needs tmux, ~3.5 min)
-make asm app       # build HOTP and the app directory for the calculator
-```
+You need an HP 48G or 48GX and a serial cable to the PC through a USB-RS232
+adapter (real RS-232 levels; pinout in [DESIGN.md](DESIGN.md#cable)). On the
+calculator: wire mode (`-33 CF`) and `IOPAR` set to `{ 9600 0 0 0 3 1 }`.
 
-`make toolchain` needs a C compiler, autoconf, automake, curl, unzip, git and
-pkg-config, plus x48ng's build dependencies (`make check` only needs the Lua headers):
+**Back up your calculator first.** This is machine code, and a bug can clear
+the memory.
 
-- **Fedora:** `sudo dnf install lua-devel readline-devel ncurses-devel gtk4-devel tmux`
-- **Debian/Ubuntu:** `sudo apt install liblua5.4-dev libreadline-dev libncurses-dev libgtk-4-dev tmux`
+The whole app is one file, [`dist/TOTP`](dist/TOTP), about 10 KB:
 
-To put the toolchain somewhere else, set `HP48_EMU_HOME`. Python 3.10 or later
-is enough for the rest; nothing needs pip.
-
-## Using it
-
-### What you need
-
-- An HP 48G or 48GX, and a serial cable to the PC through a USB-RS232 adapter
-  (real RS-232 levels; pinout in [DESIGN.md](DESIGN.md#cable)).
-- On the calculator, wire mode (`-33 CF`) and `IOPAR` set to `{ 9600 0 0 0 3 1 }`.
-- The calculator's clock set to local time, to the second if possible. `TZ`
-  (default 2, CEST) is the UTC offset in hours, and the TZ key toggles 1 ↔ 2.
-
-### Install
-
-```sh
-make asm app                                   # build HOTP and the TOTP directory
-python3 ref/make_hp_payload.py --import FILE   # or with no option, to type accounts in
-PORT=/dev/serial/by-id/usb-...        # your USB-RS232 adapter (ls /dev/serial/by-id/)
-```
-
-1. On the 48: go to `HOME`, then run `SERVER`. Then:
-   `python3 tools/hpkermit.py $PORT send out/TOTP TOTP`
-2. On the 48: press ON, type `TOTP` (to enter the directory), then run `SERVER`. Then:
+1. On the 48, in `HOME`, start the Kermit server (`SERVER`).
+2. Send `dist/TOTP` with any Kermit program, in binary mode. With the one in
+   this repository:
    ```sh
-   python3 tools/hpkermit.py $PORT send asm/hotp.bin HOTP
-   python3 tools/hpkermit.py $PORT send out/ACCTS ACCTS
-   python3 tools/hpkermit.py $PORT finish
+   python3 tools/hpkermit.py /dev/serial/by-id/usb-... send dist/TOTP TOTP
+   python3 tools/hpkermit.py /dev/serial/by-id/usb-... finish
    ```
-3. On the 48: press **OTP**. The first run creates `WRK` (scratch memory) and
-   moves `OTP` to the first soft key.
+   (`ls /dev/serial/by-id/` shows your adapter.)
+3. On the 48: **VAR**, **TOTP**, then **OTP**.
+4. In the app: **TIME** to set the clock (local time, to the second if you can;
+   `TZ` is the UTC offset in hours), then **ADD** for each account.
 
 Check a code against your phone before relying on it.
 
-### Accounts
+## Accounts
 
-`out/ACCTS` holds `{ { "name" { 10 binary integers } } … }`: each account's
-name and its two midstates. It is written with mode 0600 and ignored by git.
+- **On the calculator:** ADD asks for a name (12 characters at most) and the
+  base32 secret, which services show under "can't scan the QR code?". Spaces,
+  dashes and lower case are fine. Computing the midstates takes a few seconds,
+  then the new account opens so you can compare its code.
+- **REN** renames, **DEL** deletes (after confirmation), **MOVE** then ▲▼
+  reorders (ENTER when done).
+- **From the PC, many at once:** `ref/make_hp_payload.py --import FILE` reads
+  `otpauth://` URIs, one per line (Ente Auth: ☰ → Data → Export codes →
+  Plain text; Aegis also works).
+  - It skips what the 48 can't do (SHA-256/512, 8 digits, 60 s periods, HOTP)
+    and says why.
+  - It asks which accounts to keep and a short name for each.
+  - It writes `out/ACCTS`, mode 0600 and ignored by git.
 
-- **From an authenticator export:** `--import FILE` reads `otpauth://` URIs,
-  one per line (Ente Auth: ☰ → Data → Export codes → Plain text; Aegis also
-  works). It skips what the 48 can't do (SHA-256/512, 8 digits, 60 s periods,
-  HOTP) and says why, asks which accounts to keep, and asks for a short name for
-  each (12 characters at most, to fit the header). **Delete the export
-  afterwards:** `shred -u FILE`.
-- **By hand:** with no option, the script asks for a name, then a base32 secret
-  (the input is hidden). It prints the current code so you can compare.
-- **Authy can't export its secrets.** For each service, re-enroll 2FA and use
-  "can't scan the QR code?" to get the base32 secret.
-- **To replace the accounts on the calculator:** inside `TOTP`, run
-  `'ACCTS' PURGE` then `SERVER`, then send `out/ACCTS` again. The 48 doesn't
-  overwrite an existing variable on receive unless flag −36 is set. Nothing else
-  needs rebuilding.
+  Inside `TOTP` on the 48, run `'ACCTS' PURGE` (this replaces all accounts),
+  start `SERVER` and send `out/ACCTS`. **Delete the export afterwards:**
+  `shred -u FILE`. With no option, the script prompts for accounts one by one,
+  without echoing the secret.
+- **Authy can't export its secrets.** For each service, re-enroll 2FA and copy
+  the base32 secret into both Authy and the 48.
 
-### Memory
+## Memory
 
-About 4.1 KB stored (TOTP directory 2.9 KB, HOTP 0.8 KB, WRK and PICT), plus
-about 200 B per account, plus about 3 KB of headroom while running. On a 48G,
-plan for 7–8 KB with a handful of accounts.
+| Part | Size |
+|---|---|
+| The app | about 10 KB |
+| Each account | about 200 B |
+| At run time | about 2–3 KB more (scratch string, screen, temporaries) |
 
-### Security
+With a handful of accounts, keep about 14 KB free.
+
+## Security
 
 - The calculator has no protection: anyone holding it can read `ACCTS`. Treat it
   like a key.
-- Never paste a secret into a chat or a command line; use the prompts, which
-  don't echo. If a secret has leaked, re-enroll that service.
-- `out/` is git-ignored. The tests only use the RFC test secret.
+- Never paste a secret into a chat or a command line. Use ADD on the 48, or the
+  script's prompts, which don't echo. If a secret has leaked, re-enroll that
+  service.
+- `out/` is git-ignored. The tests only use RFC and made-up test secrets.
 
-### Troubleshooting
+## Troubleshooting
 
-- **Codes off by one window:** the 48's clock has drifted; set it again. Most
-  services accept ±30 s.
-- **"WRK missing" / "WRK too short":** `CODE` refuses to run `HOTP` without a
-  proper scratch string, since HOTP writes into it in place. `OTP` creates `WRK`
-  by itself; you can also `'WRK' PURGE` and run `OTP` again.
+- **Codes off by one window:** the 48's clock has drifted. The previous or next
+  code in the account view usually matches; set the time again with **TIME**.
+- **"Bad base32 character":** the secret contains something other than A–Z,
+  2–7, spaces, dashes or `=`.
+- **"WRK is not a string" / "WRK too short":** `WRK` is the scratch string the
+  machine code writes into. Run `'WRK' PURGE`; the app recreates it.
 - **Kermit gets no answer:** check that the 48 shows "Awaiting Server Cmd." and
   is in wire mode (`-33 CF`).
 - **The 48 restarts, or VAR crashes inside `TOTP`:** memory is corrupted. Delete
-  the directory with `'TOTP' PGDIR` (or, as a last resort, ON+A+F, which wipes
-  everything) and reinstall. This happened once during development, before the
-  Kermit client fixes and the WRK check. Since then, a full read-back of the
-  directory after a real `OTP` run comes out clean.
+  the directory with `'TOTP' PGDIR` (as a last resort, ON+A+F wipes everything)
+  and reinstall.
 
 ## Development
 
@@ -155,8 +147,9 @@ plan for 7–8 KB with a handful of accounts.
 | `make asm` | Assemble `asm/*.a` with HP Tools into `asm/*.bin` (HPHP48 binary objects) |
 | `make asm-test` | Run the asm routines on x48ng's CPU core (`tools/satrun`), with no ROM or UI |
 | `make app` | Build `out/TOTP`: the app directory (RPL programs + big digit font) as text |
+| `make dist` | Build `dist/TOTP`: the app with its machine code, as one binary directory, by installing it on the emulator and fetching it back |
 | `make payload-rfc` | `out/ACCTS` with RFC test accounts |
-| `make e2e` | Boot headless 48GXs in x48ng: HOTP, app programs, rendered screen, and the live app driven by keys (~3.5 min) |
+| `make e2e` | Boot headless 48GXs in x48ng: HOTP, app programs, rendered screen, a live session driven by keys, and the one-file install (~8 min) |
 | `make emu` | Emu48 under Wine, for poking around by hand |
 
 ### Test layers
@@ -169,15 +162,21 @@ plan for 7–8 KB with a handful of accounts.
    (including a fake RPL stack), run it and read the results back. Breakpoints
    print registers, which is how every one of the 80 SHA-1 rounds is compared
    with `ref/sha1_trace.py`. HOTP is checked on the RFC counters, on random keys
-   (including keys over 64 bytes) and on 64-bit counters, along with the
-   restored RPL registers.
+   (including keys over 64 bytes) and on 64-bit counters, and SHAC on random
+   compressions and the RFC midstates, along with the restored RPL registers.
 3. **`make e2e`**: `tools/hp48.py` runs x48ng in tmux (`tools/x48.sh`), types on
    the keyboard, and moves objects with `tools/hpkermit.py`. `hp.eval("…")` runs
-   RPL on the calculator and `hp.result()` returns level 1. `tests/test_app.py`:
-   - checks the programs, and the rendered screen pixel by pixel;
-   - runs the live app, reading the code back from the emulator's display
-     (`tools/hpgrob.py` decodes the TUI's quadrant characters into pixels);
-   - presses NEXT, ◀ and TZ along the way.
+   RPL on the calculator and `hp.result()` returns level 1.
+   - `tests/test_app.py` checks the programs (including base32 decoding and
+     midstates computed on the calculator) and the rendered screen pixel by
+     pixel.
+   - It then runs one live session: home view, opening an account, PREV, TZ,
+     ADD with a secret typed on the keyboard, MOVE and DEL. Each step is read
+     back from the emulator's display: `tools/hpgrob.py` decodes the TUI's
+     quadrant characters into pixels, and the home rows use the calculator's
+     own medium-font glyphs.
+   - `tests/test_dist.py` installs `dist/TOTP` alone on a fresh 48GX and adds an
+     account.
 4. **The real calculator**: `tools/hpkermit.py PORT send|get|finish`. Reading
    variables back with `get` is the way to verify an install.
 
@@ -190,17 +189,21 @@ plan for 7–8 KB with a handful of accounts.
 | `rpl/` | App programs, one object per file, in `%%HP` text with `\<<` trigraphs |
 | `tests/` | End-to-end tests on the emulator |
 | `tools/` | satrun, Kermit client, x48ng driver, GROB/screen codec, app builder, Emu48 launcher |
-| `docs/` | Screenshot |
+| `dist/` | `TOTP`: the release, one binary directory object |
+| `docs/` | Screenshots |
 
 RPL variable names must not collide with built-in commands: `DRAW` and `MENU`
 did, and fail with "Invalid Syntax" inside a directory.
 
-### Calling HOTP directly
+### Calling the machine code directly
 
-`keys counter R→B WRK HOTP B→R 1000000 MOD`, where `keys` is a list of 10
-binary integers (istate then ostate, `ACCTS i GET 2 GET`) and `WRK` a string of
-at least 355 characters. `HOTP` overwrites the counter object with the result,
-so it must be a fresh object, straight from `R→B`.
+- `keys counter R→B WRK HOTP B→R 1000000 MOD`: `keys` is a list of 10 binary
+  integers (istate then ostate, `ACCTS i GET 2 GET`), and `WRK` a string of at
+  least 355 characters. `HOTP` overwrites the counter object with the result, so
+  it must be a fresh object, straight from `R→B`.
+- `state block WRK SHAC`: `state` is a fresh list of 5 binary integers, updated
+  in place, and `block` a 64-character string whose 4-byte words are byte-reversed
+  (see `PADB`). `"secret" B32D MIDS` gives the 10-word list for `ACCTS`.
 
 ### Local toolchain (not in the repo)
 
@@ -241,6 +244,9 @@ with HP's permission. It isn't part of this repository.
   existing variables.
 - **Parallel runs:** each run gets its own tmux session and data directory, so
   parallel runs don't collide.
+- **Screen capture:** the emulator runs with a terminal type that has no
+  hardware tabs. Otherwise tmux would capture the tabs ncurses moves the cursor
+  with, and the cells they skip would be lost.
 
 ## Contributing
 

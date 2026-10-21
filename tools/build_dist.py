@@ -32,7 +32,7 @@ def main():
         x48("type", "HOME")
         x48("keys", "Enter")
         hp.server()
-        hp.eval("TOTP { RUN RSLT } PURGE VARS HOME")
+        hp.eval("TOTP { RUN RSLT } PURGE { OTP } ORDER VARS HOME")
         names = hp.result()
         hp.eval("-35 SF 0")  # binary transfers
         hp.result()

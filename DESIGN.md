@@ -20,22 +20,29 @@ the phone is lost.
 ## Architecture
 
 ```
-PC (Fedora)                                   HP 48G
-──────────────────────────────                ─────────────────────────────────
-otpauth:// export or base32 secret
-  └─ ref/make_hp_payload.py ──► out/ACCTS ──┐
-rpl/*.hp ── tools/build_app.py ──► out/TOTP ─┼─ Kermit ──► TOTP directory
-asm/hotp.a ── sasm/sload ──► asm/hotp.bin ───┘  (serial)    ├─ OTP   the app
-                                                            ├─ HOTP  machine code
-                                                            ├─ ACCTS accounts
-                                                            └─ helpers, font, TZ
+PC (Fedora)                                        HP 48G
+───────────────────────────────────                ─────────────────────────────────
+rpl/*.hp ── tools/build_app.py ──► out/TOTP ─┐
+asm/{hotp,shac}.a ── sasm/sload ──► *.bin ───┼─ make dist (emulator) ──► dist/TOTP
+                                             │                            │ Kermit
+otpauth:// export (optional)                 │                            ▼
+  └─ ref/make_hp_payload.py ──► out/ACCTS ───┘ ─ Kermit ──────────► TOTP directory
+                                                                    ├─ OTP   the app
+                                                                    ├─ HOTP  code (HMAC + truncation)
+                                                                    ├─ SHAC  code (one compression)
+                                                                    ├─ ACCTS accounts
+                                                                    └─ helpers, font, TZ
 ```
 
-The PC does everything that's done once (midstates, building the app). The
-calculator only turns its clock into a counter, runs two SHA-1 compressions and
-draws the screen.
+- **The release:** a single binary directory, `dist/TOTP`. `make dist` builds
+  it by installing the text directory and the two Code objects on an emulated
+  48GX, then fetching the directory back in binary transfer mode.
+- **Accounts:** they're added on the calculator, where `ADD` computes the
+  midstates with `SHAC`, or imported in bulk from the PC.
+- **Work per code:** the calculator turns its clock into a counter, runs two
+  SHA-1 compressions and draws the screen.
 
-## TOTP, and why only midstates are sent
+## TOTP, and why only midstates are stored
 
 1. `counter = floor(unix_time / 30)`, as 8 bytes big-endian.
 2. `h = HMAC-SHA1(secret, counter)`, 20 bytes.
@@ -44,7 +51,8 @@ draws the screen.
 
 HMAC-SHA1 is `SHA1((K ⊕ opad) ‖ SHA1((K ⊕ ipad) ‖ message))`, with K padded to
 one 64-byte block. The first compression of each hash depends only on the key,
-so it's done once on the PC:
+so it's done once, when the account is added (`MIDS` on the calculator, or
+`ref/make_hp_payload.py` on the PC):
 
 - `istate = SHA1_compress(IV, K ⊕ ipad)`
 - `ostate = SHA1_compress(IV, K ⊕ opad)`
@@ -57,11 +65,12 @@ The calculator then needs **2 compressions per code** instead of 4:
   total length 64 + 20 = 84 bytes (672 bits).
 
 The midstates are as sensitive as the secret: anyone holding them can compute
-every code. The secret itself never leaves the PC, though, and the midstates
-can't be turned back into a QR code for another app.
+every code. They can't be turned back into the secret, or into a QR code for
+another app, though.
 
-Keys longer than 64 bytes are hashed first, as HMAC requires; the Python
-reference handles this and the tests cover it.
+Keys longer than 64 bytes are hashed first, as HMAC requires. The Python
+reference handles that and the tests cover it. `MIDS` on the calculator refuses
+them ("Secret too long"); base32 secrets from services are 10 to 32 bytes.
 
 **Test vectors** (secret `12345678901234567890` in ASCII):
 - RFC 4226, counter 0 → `755224`, counter 1 → `287082`.
@@ -140,6 +149,28 @@ code from the previous or next 30 s window.
   (`A=DAT0 A, D0=D0+5, PC=(A)`).
 - **Speed:** about 17,900 instructions, roughly 0.05 s on a 48G.
 
+### SHAC Code object (`asm/shac.a`)
+
+```
+3: { h0 h1 h2 h3 h4 }   5 user binary integers, updated in place
+2: block                64-character string: 16 words, each stored least
+                        significant nibble first (bytes reversed per word)
+1: scratch              string of at least 355 characters
+→ 1: { h0..h4 }         the same list, compressed
+```
+
+`SHAC` uses the same conventions as `HOTP`: the registers are saved in the
+scratch string and it includes the same `SHA1C`.
+
+- **`PADB`:** builds the ipad or opad block in RPL. It zero-pads the key, XORs
+  it with 0x36 or 0x5C, and reverses each 4-byte word, so the machine code never
+  swaps bytes.
+- **`MIDS`:** runs `SHAC` twice from the SHA-1 IV, giving the 10 words stored in
+  `ACCTS`.
+- **`B32D`:** decodes base32 in RPL.
+- **Time:** computing one account's midstates takes a few seconds, mostly
+  `PADB`'s character-by-character loop.
+
 ### Object layouts in memory
 
 | Object | Prolog | Layout (nibbles) |
@@ -162,17 +193,21 @@ and `HOTP` would write over whatever object that is.
 
 ## The app
 
+### Variables
+
 | Variable | Role |
 |---|---|
-| `OTP` | The app: the main loop, `KEY` polling, `PVIEW`. It moves itself to the first soft key. |
+| `OTP` | The app: the main loop, `KEY` polling, `PVIEW`, the three modes (home, account, move), auto power-off. It moves itself to the first soft key. Its locals have one-letter names, listed at the top of the source, because User RPL stores a local's name at every use. |
+| `HSCR`, `HTICK` | home view: the static screen (rows, labels), then the header with seconds and the countdown |
+| `DSCR`, `DTICK` | account view: the static screen (name, previous / current / next code, labels), then the countdown |
+| `LBLS`, `CTXT`, `TZL`, `FMT6`, `FMT7` | key labels, centered text, time zone label, code formatting |
 | `CODE` | account index, counter → 6-digit string (calls `HOTP`) |
 | `UNIX` | clock → Unix time |
-| `SCRN` | name, header, code, labels → 131×64 screen GROB without the countdown |
-| `TICK` | seconds left → countdown bar and seconds drawn into PICT in one `REPL` |
-| `LBLS` | the soft key labels, built once per run |
-| `FMT6` | number → 6 digits with leading zeros |
+| `ADDA`, `RENA`, `DELA`, `TIMEA`, `SWAP2` | ADD, REN, DEL, TIME and MOVE |
+| `B32D`, `PADB`, `MIDS` | base32 decoding and midstates on the calculator (calls `SHAC`) |
+| `MKWRK` | creates `WRK`, the scratch string the machine code works in |
 | `DIGS` | the large digits 0–9 as 15×21 GROBs (a 5×7 font scaled ×3, generated in Python) |
-| `TZ`, `ACCTS`, `HOTP`, `WRK` | data, the machine code and the scratch string |
+| `TZ`, `ACCTS`, `HOTP`, `SHAC`, `WRK` | data, the machine code and the scratch string |
 
 ### Display
 
@@ -183,26 +218,52 @@ and `HOTP` would write over whatever object that is.
   on screen. Re-storing it caused a second of garbage at each new code.
 - **The countdown is drawn in one `REPL`:** it's composed off screen, so the bar
   never flickers.
+- **Recompute (`r`) and redraw (`q`) are separate.** Codes are recomputed on a
+  new 30 s window, an account change or TZ. The static screen is redrawn whenever
+  something shown changes, such as the selection or the order. Each second, only
+  the countdown is.
+- **Input screens.** ADD and REN use `INPUT` rather than `INFORM`: INPUT returns
+  the typed text as is, while INFORM would parse a base32 secret as an object.
+  DEL confirms with `CHOOSE`, and TIME is an `INFORM` with numeric fields.
+- **Auto power-off.** After 3 minutes without a key press, `OFF` turns the
+  calculator off from inside the program. ON resumes the app, which then redraws
+  everything.
+
+### Layouts (131×64)
+
+| Rows (y) | Home view | Account view |
+|---|---|---|
+| 0–7 | `TOTP` · seconds, time zone | name · `3/9 CEST` |
+| 9–10 | countdown (2 px) | |
+| 9–16 | | `prev  110 349` |
+| 12–51 | 5 rows: name · code, the selected one inverted | |
+| 18–38 | | current code, 15×21 digits |
+| 40–47 | | `next  902 115` |
+| 48–55 | | countdown bar, seconds |
+| 56–63 | soft key labels | soft key labels |
 
 ### Timings at 48G speed
 
 | Step | Time |
 |---|---|
-| HOTP | 0.05 s |
-| Large digits | 0.35 s |
-| Menu labels (once per run) | 0.5 s |
-| Full screen | about 1 s, only on a new code, an account change or TZ |
-| Countdown, each second | 0.06 s |
+| One code (HOTP) | 0.05 s |
+| Home view, all codes, on a new window | about 0.1 s per account, plus drawing |
+| Account view, three codes and large digits | about 1 s |
+| Countdown, each second | about 0.06 s |
+| Adding an account (midstates) | a few seconds |
 
 ### RAM
 
 | Part | Size |
 |---|---|
-| TOTP directory | 2.9 KB |
-| HOTP | 0.8 KB |
-| WRK and PICT | about 1.4 KB |
+| `dist/TOTP` (programs, font, HOTP, SHAC) | about 10 KB; `OTP` alone is 3 KB |
 | Each account | about 200 B |
-| Headroom while running | about 3 KB |
+| WRK and PICT | about 1.4 KB, created at run time |
+| Temporaries while running | about 1–2 KB |
+
+Numbers cost a lot in User RPL: every real other than the few built into the ROM
+takes 10.5 bytes, and every binary integer (`#131d`) 13. Coordinates and key
+codes are most of the size. A System RPL rewrite could roughly halve it.
 
 ### Names
 
@@ -277,8 +338,10 @@ when unthrottled, dropped keys, a stalled port) are listed in the README.
 - `→LCD` doesn't cover the menu row, and `TMENU` only takes effect after the
   program ends.
 - `STR→` is slow (it runs the full parser); `NUM 47 -` is enough to read a digit.
-- tmux turns runs of spaces into tabs when it captures a pane, so captures must
-  be passed through `expandtabs(8)` before decoding the screen.
+- When ncurses moves the cursor with hardware tabs, tmux captures a tab, and the
+  cells it skipped are lost. The emulator therefore runs with a terminal type
+  that has no tabs (`tools/x48.sh` builds it from `tmux-256color`).
+- `INFORM` parses what you type; a text field needs `INPUT`.
 
 ## Prior art
 

@@ -7,13 +7,14 @@ SATRUN = tools/satrun/satrun
 # x48ng's headers include Lua's (Fedora: lua-devel, Debian/Ubuntu: liblua5.4-dev)
 LUA_CFLAGS ?= $(shell pkg-config --cflags lua5.4 2>/dev/null || pkg-config --cflags lua 2>/dev/null)
 
-.PHONY: help toolchain check test vectors trace payload-rfc app emu emu-rpl asm satrun asm-test e2e clean
+.PHONY: help toolchain check dist test vectors trace payload-rfc app emu emu-rpl asm satrun asm-test e2e clean
 
 help:
 	@echo "make toolchain   build HP Tools, x48ng and fetch the ROM into $(HP48_EMU_HOME)"
 	@echo "make check       Python reference tests + Saturn asm tests (fast)"
 	@echo "make e2e         end-to-end tests on a headless emulated 48GX (~3.5 min)"
-	@echo "make asm app     build HOTP (asm/hotp.bin) and the app directory (out/TOTP)"
+	@echo "make asm app     build the machine code (asm/*.bin) and the app directory (out/TOTP)"
+	@echo "make dist        dist/TOTP: the whole app as one binary file (built on the emulator)"
 	@echo "make clean       remove build products"
 
 toolchain:
@@ -63,8 +64,12 @@ asm-test: asm $(SATRUN)
 	cd asm && $(PY) -m unittest discover -v -p 'test_*.py'
 
 # boots x48ng headless, talks to it over the emulated wire port (~3.5 min)
-e2e: asm app
-	$(PY) -m unittest -v tests/test_e2e.py tests/test_app.py
+e2e: asm app dist
+	$(PY) -m unittest -v tests/test_e2e.py tests/test_app.py tests/test_dist.py
+
+# dist/TOTP: install the app on the emulator, fetch the directory back in binary
+dist: asm app
+	$(PY) tools/build_dist.py
 
 clean:
 	rm -f asm/*.o asm/*.l asm/*.bin $(SATRUN) out/TOTP out/*.txt
