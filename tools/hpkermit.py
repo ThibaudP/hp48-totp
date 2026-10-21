@@ -178,9 +178,18 @@ class Kermit:
         from hp2emu import TRIGRAPHS
         text = re.sub(r"\\(\d{3}|..)", lambda m: chr(int(m.group(1))) if m.group(1).isdigit()
                       else chr(TRIGRAPHS.get(m.group(1), ord("?"))), command)
-        # Never re-sent: the server would evaluate it again.  It answers once the
-        # command has run, which can take a while.
-        return self.receive(make_packet(0, "C", encode(text.encode("latin-1"))), command, resend=False, wait=300)
+        # Never re-sent after silence: the server would evaluate it again.  It
+        # answers once the command has run, which can take a while.  "Invalid
+        # Server Cmd." means it arrived while the server was still finishing the
+        # previous transfer and was not run, so that one is safe to retry.
+        for attempt in range(5):
+            try:
+                return self.receive(make_packet(0, "C", encode(text.encode("latin-1"))), command,
+                                    resend=False, wait=300)
+            except KermitError as e:
+                if "Invalid Server Cmd" not in str(e) or attempt == 4:
+                    raise
+                time.sleep(1.5)
 
     def receive(self, request, name, resend=True, wait=None):
         """Send a request packet, then receive the transfer the server answers with.
